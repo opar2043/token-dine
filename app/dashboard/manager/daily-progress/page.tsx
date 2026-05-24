@@ -1,64 +1,108 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, type Column } from "@/components/DataTable";
-import { mockDailyProgress, mockWorkers } from "@/lib/mockData";
-import type { DailyProgress } from "@/lib/types";
-
-const columns: Column<DailyProgress>[] = [
-  { key: "date", header: "Date" },
-  { key: "worker", header: "Worker" },
-  { key: "table", header: "Table" },
-  { key: "tokenGiven", header: "Given", align: "right" },
-  { key: "tokenSold", header: "Sold", align: "right" },
-  {
-    key: "balance",
-    header: "Balance",
-    align: "right",
-    render: (row) => (
-      <span
-        className={
-          row.balance < 0
-            ? "font-semibold text-rose-600 dark:text-rose-400"
-            : "text-slate-700 dark:text-slate-200"
-        }
-      >
-        {row.balance}
-      </span>
-    ),
-  },
-  { key: "notes", header: "Notes", render: (row) => row.notes ?? "—" },
-];
+import { progressService, usersService } from "@/lib/services";
+import { buildLookup, formatDate } from "@/lib/format";
+import type { DailyProgress, User } from "@/lib/types";
 
 export default function ManagerDailyProgressPage() {
-  const [worker, setWorker] = useState(mockWorkers[0]?.name ?? "");
-  const [table, setTable] = useState(mockWorkers[0]?.table ?? "");
+  const [workers, setWorkers] = useState<User[]>([]);
+  const [rows, setRows] = useState<DailyProgress[]>([]);
+  const [workerId, setWorkerId] = useState("");
+  const [table, setTable] = useState("");
   const [given, setGiven] = useState(0);
   const [sold, setSold] = useState(0);
   const [notes, setNotes] = useState("");
-  const [rows, setRows] = useState<DailyProgress[]>(mockDailyProgress);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [w, p] = await Promise.all([
+          usersService.getUsers({ role: "worker", limit: 100 }),
+          progressService.getProgress(),
+        ]);
+        if (cancelled) return;
+        setWorkers(w.items);
+        setRows(p);
+        if (w.items[0]) {
+          setWorkerId(w.items[0].id);
+          setTable(w.items[0].table ?? "");
+        }
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load progress.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const workerMap = useMemo(() => buildLookup(workers), [workers]);
 
   const balance = useMemo(() => given - sold, [given, sold]);
   const negative = balance < 0;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const entry: DailyProgress = {
-      id: `DP-${rows.length + 10}`,
-      worker,
-      table,
-      tokenGiven: given,
-      tokenSold: sold,
-      balance,
-      date: new Date().toISOString().slice(0, 10),
-      notes: notes || undefined,
-    };
-    setRows([entry, ...rows]);
-    setGiven(0);
-    setSold(0);
-    setNotes("");
+    setError(null);
+    if (!workerId) return setError("Choose a worker.");
+
+    setSubmitting(true);
+    try {
+      const created = await progressService.createProgress({
+        workerId,
+        table,
+        tokenGiven: given,
+        tokenSold: sold,
+        notes: notes || undefined,
+      });
+      setRows([created, ...rows]);
+      setGiven(0);
+      setSold(0);
+      setNotes("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save progress.");
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  const columns: Column<DailyProgress>[] = [
+    { key: "date", header: "Date", render: (row) => formatDate(row.date) },
+    {
+      key: "worker",
+      header: "Worker",
+      render: (row) => workerMap.get(row.workerId)?.name ?? row.worker ?? row.workerId,
+    },
+    { key: "table", header: "Table" },
+    { key: "tokenGiven", header: "Given", align: "right" },
+    { key: "tokenSold", header: "Sold", align: "right" },
+    {
+      key: "balance",
+      header: "Balance",
+      align: "right",
+      render: (row) => (
+        <span
+          className={
+            row.balance < 0
+              ? "font-semibold text-rose-600 dark:text-rose-400"
+              : "text-slate-700 dark:text-slate-200"
+          }
+        >
+          {row.balance}
+        </span>
+      ),
+    },
+    { key: "notes", header: "Notes", render: (row) => row.notes ?? "—" },
+  ];
 
   return (
     <DashboardShell role="manager">
@@ -69,6 +113,12 @@ export default function ManagerDailyProgressPage() {
         </p>
       </div>
 
+      {error ? (
+        <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+          {error}
+        </div>
+      ) : null}
+
       <form onSubmit={handleSubmit} className="card mb-6">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           <div>
@@ -76,17 +126,16 @@ export default function ManagerDailyProgressPage() {
               Worker
             </label>
             <select
-              value={worker}
+              value={workerId}
               onChange={(e) => {
-                const next = e.target.value;
-                setWorker(next);
-                const match = mockWorkers.find((w) => w.name === next);
+                setWorkerId(e.target.value);
+                const match = workers.find((w) => w.id === e.target.value);
                 if (match?.table) setTable(match.table);
               }}
               className="input mt-1"
             >
-              {mockWorkers.map((w) => (
-                <option key={w.id} value={w.name}>
+              {workers.map((w) => (
+                <option key={w.id} value={w.id}>
                   {w.name}
                 </option>
               ))}
@@ -150,13 +199,17 @@ export default function ManagerDailyProgressPage() {
         </div>
 
         <div className="mt-4 flex justify-end">
-          <button type="submit" className="btn-primary">
-            Save progress
+          <button type="submit" className="btn-primary" disabled={submitting}>
+            {submitting ? "Saving…" : "Save progress"}
           </button>
         </div>
       </form>
 
-      <DataTable<DailyProgress> columns={columns} rows={rows} />
+      <DataTable<DailyProgress>
+        columns={columns}
+        rows={rows}
+        emptyMessage={loading ? "Loading progress…" : "No entries yet."}
+      />
     </DashboardShell>
   );
 }

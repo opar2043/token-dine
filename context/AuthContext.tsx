@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { mockUsers } from "@/lib/mockData";
+import { authService } from "@/lib/services/auth.route";
 import type { Role, User } from "@/lib/types";
 
 const STORAGE_KEY = "restaurant-auth-user";
@@ -25,10 +25,10 @@ interface RegisterPayload {
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  loginAdmin: (email: string, password: string) => User | null;
-  loginStaff: (mobile: string, password: string) => User | null;
-  register: (payload: RegisterPayload) => User;
-  logout: () => void;
+  loginAdmin: (email: string, password: string) => Promise<User>;
+  loginStaff: (mobile: string, password: string) => Promise<User>;
+  register: (payload: RegisterPayload) => Promise<User>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -57,51 +57,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loginAdmin = useCallback(
-    (email: string, password: string) => {
-      // Demo: any non-empty password works for the seeded admin email.
-      const match = mockUsers.find(
-        (u) => u.role === "admin" && u.email?.toLowerCase() === email.toLowerCase(),
-      );
-      if (!match || !password) return null;
-      if (match.status === "blocked") return null;
-      persist(match);
-      return match;
+    async (email: string, password: string) => {
+      const u = await authService.loginAdmin({ email, password });
+      persist(u);
+      return u;
     },
     [persist],
   );
 
   const loginStaff = useCallback(
-    (mobile: string, password: string) => {
-      const match = mockUsers.find(
-        (u) => (u.role === "manager" || u.role === "worker") && u.mobile === mobile,
-      );
-      if (!match || !password) return null;
-      if (match.status === "blocked") return null;
-      persist(match);
-      return match;
+    async (mobile: string, password: string) => {
+      const u = await authService.loginStaff({ mobile, password });
+      persist(u);
+      return u;
     },
     [persist],
   );
 
   const register = useCallback(
-    (payload: RegisterPayload) => {
-      const id = `U-${Math.floor(Math.random() * 9000 + 1000)}`;
-      const newUser: User = {
-        id,
-        name: payload.name,
-        mobile: payload.mobile,
-        email: payload.email,
-        role: payload.role,
-        status: "active",
-        joinedOn: new Date().toISOString().slice(0, 10),
-      };
-      persist(newUser);
-      return newUser;
+    async (payload: RegisterPayload) => {
+      const u = await authService.register(payload);
+      persist(u);
+      return u;
     },
     [persist],
   );
 
-  const logout = useCallback(() => persist(null), [persist]);
+  const logout = useCallback(async () => {
+    try {
+      await authService.logout();
+    } catch {
+      // server logout is stateless — ignore failures
+    }
+    persist(null);
+  }, [persist]);
 
   const value = useMemo(
     () => ({ user, loading, loginAdmin, loginStaff, register, logout }),

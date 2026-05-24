@@ -22,25 +22,24 @@ export default function LoginPage() {
     }
   }, [user, loading, router]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSubmitting(true);
 
-    const result =
-      mode === "admin"
-        ? loginAdmin(identifier.trim(), password)
-        : loginStaff(identifier.trim(), password);
-
-    if (!result) {
-      setError(
+    try {
+      const result =
         mode === "admin"
-          ? "No admin account found for that email. Try admin@restaurant.com."
-          : "No staff account found for that mobile. Try 01710000001 (manager) or 01810000001 (worker).",
-      );
-      return;
+          ? await loginAdmin(identifier.trim(), password)
+          : await loginStaff(identifier.trim(), password);
+      router.replace(`/dashboard/${result.role}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed.");
+    } finally {
+      setSubmitting(false);
     }
-
-    router.replace(`/dashboard/${result.role}`);
   };
 
   return (
@@ -118,8 +117,8 @@ export default function LoginPage() {
                 </p>
               ) : null}
 
-              <button type="submit" className="btn-primary w-full">
-                Sign in
+              <button type="submit" className="btn-primary w-full" disabled={submitting}>
+                {submitting ? "Signing in…" : "Sign in"}
               </button>
             </form>
 

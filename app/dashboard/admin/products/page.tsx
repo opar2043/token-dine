@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, StatusBadge, type Column } from "@/components/DataTable";
 import { Modal } from "@/components/Modal";
 import { PlusIcon } from "@/components/icons";
-import { mockProducts } from "@/lib/mockData";
+import { productsService } from "@/lib/services";
+import { formatDate, formatId } from "@/lib/format";
 import type { Product } from "@/lib/types";
 
 function stockStatus(stock: number): Product["status"] {
@@ -15,8 +16,27 @@ function stockStatus(stock: number): Product["status"] {
 }
 
 export default function AdminProductsPage() {
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [products, setProducts] = useState<Product[]>([]);
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await productsService.getProducts();
+        if (!cancelled) setProducts(data);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load products.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const columns: Column<Product>[] = [
     {
@@ -28,7 +48,7 @@ export default function AdminProductsPage() {
         </div>
       ),
     },
-    { key: "id", header: "SKU" },
+    { key: "id", header: "SKU", render: (p) => formatId(p.id) },
     { key: "name", header: "Product" },
     { key: "category", header: "Category" },
     { key: "costPrice", header: "Cost", align: "right", render: (p) => `৳ ${p.costPrice}` },
@@ -40,8 +60,8 @@ export default function AdminProductsPage() {
       render: (p) => `৳ ${p.sellingPrice - p.costPrice}`,
     },
     { key: "stock", header: "Stock", align: "right" },
-    { key: "addedOn", header: "Added" },
-    { key: "updatedOn", header: "Updated" },
+    { key: "addedOn", header: "Added", render: (p) => formatDate(p.addedOn) },
+    { key: "updatedOn", header: "Updated", render: (p) => formatDate(p.updatedOn) },
     { key: "status", header: "Status", render: (p) => <StatusBadge status={p.status} /> },
   ];
 
@@ -64,7 +84,17 @@ export default function AdminProductsPage() {
         </button>
       </div>
 
-      <DataTable<Product> columns={columns} rows={products} />
+      {error ? (
+        <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+          {error}
+        </div>
+      ) : null}
+
+      <DataTable<Product>
+        columns={columns}
+        rows={products}
+        emptyMessage={loading ? "Loading products…" : "No products yet."}
+      />
 
       <Modal
         open={open}
@@ -74,7 +104,6 @@ export default function AdminProductsPage() {
         description="Create a new menu item with pricing and starting stock."
       >
         <ProductForm
-          existingCount={products.length}
           onCancel={() => setOpen(false)}
           onCreate={handleCreate}
         />
@@ -87,11 +116,9 @@ const categories = ["Main Course", "Appetizer", "Beverage", "Dessert", "Snack", 
 const emojiChoices = ["🍛", "🥘", "🥤", "🍢", "🍨", "🍕", "🍔", "🥗", "🍰", "🍜", "🍤", "🍽️"];
 
 function ProductForm({
-  existingCount,
   onCancel,
   onCreate,
 }: {
-  existingCount: number;
   onCancel: () => void;
   onCreate: (p: Product) => void;
 }) {
@@ -102,8 +129,9 @@ function ProductForm({
   const [sellingPrice, setSellingPrice] = useState(0);
   const [stock, setStock] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -124,21 +152,22 @@ function ProductForm({
       return;
     }
 
-    const today = new Date().toISOString().slice(0, 10);
-    const id = `P-${String(existingCount + 1).padStart(2, "0")}`;
-    const next: Product = {
-      id,
-      name: name.trim(),
-      image,
-      category,
-      costPrice,
-      sellingPrice,
-      stock,
-      status: stockStatus(stock),
-      addedOn: today,
-      updatedOn: today,
-    };
-    onCreate(next);
+    setSubmitting(true);
+    try {
+      const created = await productsService.createProducts({
+        name: name.trim(),
+        image,
+        category,
+        costPrice,
+        sellingPrice,
+        stock,
+      });
+      onCreate(created);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create product.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const margin = sellingPrice - costPrice;
@@ -227,11 +256,11 @@ function ProductForm({
       ) : null}
 
       <div className="flex items-center justify-end gap-2">
-        <button type="button" className="btn-ghost" onClick={onCancel}>
+        <button type="button" className="btn-ghost" onClick={onCancel} disabled={submitting}>
           Cancel
         </button>
-        <button type="submit" className="btn-primary">
-          Add product
+        <button type="submit" className="btn-primary" disabled={submitting}>
+          {submitting ? "Adding…" : "Add product"}
         </button>
       </div>
     </form>

@@ -1,65 +1,135 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
-import { mockClients, mockProducts } from "@/lib/mockData";
+import { useAuth } from "@/context/AuthContext";
+import { clientsService, productsService, salesService } from "@/lib/services";
+import { formatId } from "@/lib/format";
+import type { Client, Product } from "@/lib/types";
 
 interface CartItem {
   productId: string;
   qty: number;
+  tokensUsed: number;
 }
 
 const TOKEN_VALUE = 100;
 
 export default function WorkerSellTokenPage() {
-  const [clientId, setClientId] = useState(mockClients[0]?.id ?? "");
+  const { user } = useAuth();
+  const [clients, setClients] = useState<Client[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [clientId, setClientId] = useState("");
   const [tokens, setTokens] = useState(0);
   const [items, setItems] = useState<CartItem[]>([]);
   const [done, setDone] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [c, p] = await Promise.all([
+          clientsService.getClients({ limit: 200 }),
+          productsService.getProducts(),
+        ]);
+        if (cancelled) return;
+        setClients(c.items);
+        setProducts(p);
+        if (c.items[0]) setClientId(c.items[0].id);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load data.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const client = useMemo(
-    () => mockClients.find((c) => c.id === clientId),
-    [clientId],
+    () => clients.find((c) => c.id === clientId) ?? null,
+    [clients, clientId],
   );
 
   const totalSpend = useMemo(
     () =>
       items.reduce((sum, item) => {
-        const p = mockProducts.find((x) => x.id === item.productId);
+        const p = products.find((x) => x.id === item.productId);
         return sum + (p ? p.sellingPrice * item.qty : 0);
       }, 0),
-    [items],
+    [items, products],
   );
 
   const tokenAmount = tokens * TOKEN_VALUE;
   const remaining = (client?.balance ?? 0) * TOKEN_VALUE + tokenAmount - totalSpend;
 
-  const addItem = () => setItems((prev) => [...prev, { productId: mockProducts[0]?.id ?? "", qty: 1 }]);
+  const addItem = () =>
+    setItems((prev) => [
+      ...prev,
+      { productId: products[0]?.id ?? "", qty: 1, tokensUsed: 1 },
+    ]);
 
   const updateItem = (idx: number, patch: Partial<CartItem>) =>
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
 
   const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx));
 
-  const finalize = (e: React.FormEvent) => {
+  const finalize = async (e: React.FormEvent) => {
     e.preventDefault();
-    setDone(`S-${Math.floor(Math.random() * 9000 + 1000)}`);
-    setTokens(0);
-    setItems([]);
+    if (!user || !client) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      if (tokens > 0) {
+        await salesService.createSales({
+          clientId: client.id,
+          workerId: user.id,
+          tokens,
+          amount: tokenAmount,
+        });
+      }
+      for (const item of items) {
+        if (!item.productId || item.qty < 1) continue;
+        await clientsService.addClientPurchase(client.id, {
+          productId: item.productId,
+          qty: item.qty,
+          tokensUsed: item.tokensUsed,
+        });
+      }
+      const updatedClient = await clientsService.getClient(client.id);
+      setClients((prev) => prev.map((c) => (c.id === updatedClient.id ? updatedClient : c)));
+      setDone(`Transaction for ${client.name} saved.`);
+      setTokens(0);
+      setItems([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to finalize transaction.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <DashboardShell role="worker">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Sell token & purchase</h1>
+        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Sell token &amp; purchase</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Issue tokens and record the client's purchases in a single transaction.
+          Issue tokens and record the client&apos;s purchases in a single transaction.
         </p>
       </div>
 
+      {error ? (
+        <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+          {error}
+        </div>
+      ) : null}
+
       {done ? (
         <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-          Transaction <strong>{done}</strong> saved.
+          {done}
         </div>
       ) : null}
 
@@ -74,7 +144,10 @@ export default function WorkerSellTokenPage() {
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
             >
-              {mockClients.map((c) => (
+              {clients.length === 0 ? (
+                <option value="">{loading ? "Loading…" : "No clients"}</option>
+              ) : null}
+              {clients.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} • {c.mobile}
                 </option>
@@ -117,14 +190,14 @@ export default function WorkerSellTokenPage() {
                 items.map((item, idx) => (
                   <div
                     key={idx}
-                    className="grid grid-cols-[1fr,90px,80px,32px] items-center gap-2 rounded-xl border border-slate-200 p-2 dark:border-slate-800"
+                    className="grid grid-cols-[1fr,70px,80px,80px,32px] items-center gap-2 rounded-xl border border-slate-200 p-2 dark:border-slate-800"
                   >
                     <select
                       className="input"
                       value={item.productId}
                       onChange={(e) => updateItem(idx, { productId: e.target.value })}
                     >
-                      {mockProducts.map((p) => (
+                      {products.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name} (৳ {p.sellingPrice})
                         </option>
@@ -134,13 +207,22 @@ export default function WorkerSellTokenPage() {
                       type="number"
                       min={1}
                       className="input"
+                      placeholder="Qty"
                       value={item.qty}
                       onChange={(e) => updateItem(idx, { qty: Number(e.target.value) || 1 })}
+                    />
+                    <input
+                      type="number"
+                      min={1}
+                      className="input"
+                      placeholder="Tokens"
+                      value={item.tokensUsed}
+                      onChange={(e) => updateItem(idx, { tokensUsed: Number(e.target.value) || 1 })}
                     />
                     <div className="text-right text-sm font-medium text-slate-700 dark:text-slate-200">
                       ৳{" "}
                       {(
-                        (mockProducts.find((p) => p.id === item.productId)?.sellingPrice ?? 0) *
+                        (products.find((p) => p.id === item.productId)?.sellingPrice ?? 0) *
                         item.qty
                       ).toLocaleString()}
                     </div>
@@ -163,6 +245,7 @@ export default function WorkerSellTokenPage() {
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Summary</h3>
 
           <Row label="Client" value={client?.name ?? "—"} />
+          <Row label="Client ID" value={client ? formatId(client.id) : "—"} />
           <Row label="Existing balance" value={`৳ ${((client?.balance ?? 0) * TOKEN_VALUE).toLocaleString()}`} />
           <Row label="New tokens" value={`+ ৳ ${tokenAmount.toLocaleString()}`} />
           <Row label="Spending" value={`− ৳ ${totalSpend.toLocaleString()}`} />
@@ -171,9 +254,7 @@ export default function WorkerSellTokenPage() {
             <Row
               label="Remaining balance"
               value={
-                <span
-                  className={remaining < 0 ? "text-rose-600 dark:text-rose-400" : ""}
-                >
+                <span className={remaining < 0 ? "text-rose-600 dark:text-rose-400" : ""}>
                   ৳ {remaining.toLocaleString()}
                 </span>
               }
@@ -181,8 +262,12 @@ export default function WorkerSellTokenPage() {
             />
           </div>
 
-          <button type="submit" className="btn-primary w-full" disabled={!client}>
-            Finalize transaction
+          <button
+            type="submit"
+            className="btn-primary w-full"
+            disabled={!client || submitting || !user}
+          >
+            {submitting ? "Saving…" : "Finalize transaction"}
           </button>
         </aside>
       </form>

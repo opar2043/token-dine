@@ -1,42 +1,126 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, type Column } from "@/components/DataTable";
-import { mockBonuses, mockWorkers } from "@/lib/mockData";
-import type { Bonus, Worker } from "@/lib/types";
+import {
+  attendanceService,
+  bonusesService,
+  salesService,
+  usersService,
+} from "@/lib/services";
+import { buildLookup, formatDate, formatId } from "@/lib/format";
+import type { AttendanceEntry, Bonus, TokenSale, User } from "@/lib/types";
 
-const recommendationColumns: Column<Worker>[] = [
-  { key: "name", header: "Worker" },
-  { key: "attendanceRate", header: "Attendance %", align: "right", render: (w) => `${w.attendanceRate}%` },
-  { key: "tokensSold", header: "Tokens Sold", align: "right" },
-  { key: "rating", header: "Rating", align: "right", render: (w) => w.rating.toFixed(1) },
+const bonusColumns = (workerMap: Map<string, User>): Column<Bonus>[] => [
+  { key: "id", header: "ID", render: (b) => formatId(b.id) },
   {
-    key: "recommend",
-    header: "Suggestion",
-    render: (w) => {
-      const eligible = w.attendanceRate >= 90 && w.tokensSold >= 250 && w.rating >= 4;
-      return eligible ? (
-        <span className="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-          Recommend bonus
-        </span>
-      ) : (
-        <span className="badge bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-          Not yet
-        </span>
-      );
-    },
+    key: "worker",
+    header: "Worker",
+    render: (b) => workerMap.get(b.workerId)?.name ?? b.worker ?? formatId(b.workerId),
   },
-];
-
-const bonusColumns: Column<Bonus>[] = [
-  { key: "id", header: "ID" },
-  { key: "worker", header: "Worker" },
-  { key: "amount", header: "Amount (BDT)", align: "right", render: (b) => `৳ ${b.amount.toLocaleString()}` },
-  { key: "date", header: "Date" },
+  {
+    key: "amount",
+    header: "Amount (BDT)",
+    align: "right",
+    render: (b) => `৳ ${b.amount.toLocaleString()}`,
+  },
+  { key: "date", header: "Date", render: (b) => formatDate(b.date) },
   { key: "reason", header: "Reason" },
 ];
 
+interface WorkerStat extends User {
+  tokensSoldTotal: number;
+  attendanceRate: number;
+}
+
 export default function ManagerBonusesPage() {
+  const [workers, setWorkers] = useState<User[]>([]);
+  const [bonuses, setBonuses] = useState<Bonus[]>([]);
+  const [sales, setSales] = useState<TokenSale[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [w, b, s, a] = await Promise.all([
+          usersService.getUsers({ role: "worker", limit: 100 }),
+          bonusesService.getBonuses(),
+          salesService.getSales(),
+          attendanceService.getAttendance(),
+        ]);
+        if (cancelled) return;
+        setWorkers(w.items);
+        setBonuses(b);
+        setSales(s);
+        setAttendance(a);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load bonuses.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const workerMap = useMemo(() => buildLookup(workers), [workers]);
+
+  const enrichedWorkers: WorkerStat[] = useMemo(() => {
+    const tokens = new Map<string, number>();
+    for (const s of sales) tokens.set(s.workerId, (tokens.get(s.workerId) ?? 0) + s.tokens);
+
+    const att = new Map<string, { total: number; present: number }>();
+    for (const a of attendance) {
+      const c = att.get(a.workerId) ?? { total: 0, present: 0 };
+      c.total += 1;
+      if (a.status === "present" || a.status === "late") c.present += 1;
+      att.set(a.workerId, c);
+    }
+
+    return workers.map((w) => {
+      const c = att.get(w.id);
+      return {
+        ...w,
+        tokensSoldTotal: tokens.get(w.id) ?? 0,
+        attendanceRate: c && c.total ? Math.round((c.present / c.total) * 100) : 0,
+      };
+    });
+  }, [workers, sales, attendance]);
+
+  const recommendationColumns: Column<WorkerStat>[] = [
+    { key: "name", header: "Worker" },
+    {
+      key: "attendanceRate",
+      header: "Attendance %",
+      align: "right",
+      render: (w) => `${w.attendanceRate}%`,
+    },
+    { key: "tokensSoldTotal", header: "Tokens Sold", align: "right" },
+    { key: "rating", header: "Rating", align: "right", render: (w) => (w.rating ?? 0).toFixed(1) },
+    {
+      key: "recommend",
+      header: "Suggestion",
+      render: (w) => {
+        const eligible =
+          w.attendanceRate >= 90 && w.tokensSoldTotal >= 250 && (w.rating ?? 0) >= 4;
+        return eligible ? (
+          <span className="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+            Recommend bonus
+          </span>
+        ) : (
+          <span className="badge bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            Not yet
+          </span>
+        );
+      },
+    },
+  ];
+
   return (
     <DashboardShell role="manager">
       <div className="mb-6">
@@ -46,18 +130,32 @@ export default function ManagerBonusesPage() {
         </p>
       </div>
 
+      {error ? (
+        <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+          {error}
+        </div>
+      ) : null}
+
       <section className="mb-8">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           Your team
         </h2>
-        <DataTable<Worker> columns={recommendationColumns} rows={mockWorkers} />
+        <DataTable<WorkerStat>
+          columns={recommendationColumns}
+          rows={enrichedWorkers}
+          emptyMessage={loading ? "Loading workers…" : "No workers."}
+        />
       </section>
 
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           Recent bonuses paid
         </h2>
-        <DataTable<Bonus> columns={bonusColumns} rows={mockBonuses} />
+        <DataTable<Bonus>
+          columns={bonusColumns(workerMap)}
+          rows={bonuses}
+          emptyMessage={loading ? "Loading bonuses…" : "No bonuses yet."}
+        />
       </section>
     </DashboardShell>
   );

@@ -1,13 +1,22 @@
 export type Role = "admin" | "manager" | "worker";
 
+export type AccountStatus = "active" | "blocked";
+
 export interface User {
   id: string;
   name: string;
   email?: string;
   mobile?: string;
+  password?: string;
   role: Role;
-  status: "active" | "blocked";
-  joinedOn: string;
+  status: AccountStatus;
+  joinedOn?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  table?: string;
+  tokensSold?: number;
+  bonus?: number;
+  rating?: number;
 }
 
 export interface Client {
@@ -24,6 +33,7 @@ export interface Client {
   tokensSpent: number;
   balance: number;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Worker {
@@ -35,8 +45,10 @@ export interface Worker {
   tokensSold: number;
   bonus: number;
   rating: number;
-  status: "active" | "blocked";
+  status: AccountStatus;
 }
+
+export type ProductStatus = "in-stock" | "low-stock" | "out-of-stock";
 
 export interface Product {
   id: string;
@@ -46,54 +58,67 @@ export interface Product {
   costPrice: number;
   sellingPrice: number;
   stock: number;
-  status: "in-stock" | "low-stock" | "out-of-stock";
+  status: ProductStatus;
   addedOn: string;
   updatedOn: string;
 }
 
 export interface TokenSale {
   id: string;
-  client: string;
-  worker: string;
+  clientId: string;
+  workerId: string;
   tokens: number;
   amount: number;
   date: string;
+  client?: string;
+  worker?: string;
 }
+
+export type AttendanceStatus = "present" | "absent" | "late";
 
 export interface AttendanceEntry {
   id: string;
-  worker: string;
+  workerId: string;
+  worker?: string;
   date: string;
-  status: "present" | "absent" | "late";
+  status: AttendanceStatus;
 }
+
+export type ComplaintStatus = "open" | "in-progress" | "resolved";
 
 export interface Complaint {
   id: string;
-  by: string;
+  byId: string;
+  by?: string;
   subject: string;
   date: string;
-  status: "open" | "in-progress" | "resolved";
+  status: ComplaintStatus;
 }
 
 export interface Bonus {
   id: string;
-  worker: string;
+  workerId: string;
+  worker?: string;
   amount: number;
-  date: string;
   reason: string;
+  date: string;
 }
+
+export type TableStatus = "active" | "free";
 
 export interface TableAssignment {
   id: string;
   table: string;
-  worker: string;
-  assignedOn: string;
-  status: "active" | "free";
+  workerId?: string;
+  worker?: string;
+  assignedOn?: string;
+  status: TableStatus;
 }
 
 export interface DailyProgress {
   id: string;
-  worker: string;
+  workerId: string;
+  worker?: string;
   table: string;
   tokenGiven: number;
   tokenSold: number;
@@ -111,4 +136,20 @@ export interface ClientPurchase {
   tokensUsed: number;
   amount: number;
   date: string;
+}
+
+export interface AnalyticsOverview {
+  revenue: { total: number; day: number; week: number; month: number };
+  tokensSold: number;
+  activeClients: number;
+  stockAlerts: number;
+  referralCount: number;
+  profitEstimate: number;
+}
+
+export interface WorkerAnalytics {
+  tokensSold: number;
+  revenue: number;
+  attendanceRate: number;
+  rating: number;
 }

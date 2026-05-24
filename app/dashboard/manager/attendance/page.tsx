@@ -1,18 +1,53 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, StatusBadge, type Column } from "@/components/DataTable";
-import { mockAttendance } from "@/lib/mockData";
-import type { AttendanceEntry } from "@/lib/types";
-
-const columns: Column<AttendanceEntry>[] = [
-  { key: "id", header: "Entry" },
-  { key: "worker", header: "Worker" },
-  { key: "date", header: "Date" },
-  { key: "status", header: "Status", render: (a) => <StatusBadge status={a.status} /> },
-];
+import { attendanceService, usersService } from "@/lib/services";
+import { buildLookup, formatDate, formatId } from "@/lib/format";
+import type { AttendanceEntry, User } from "@/lib/types";
 
 export default function ManagerAttendancePage() {
+  const [items, setItems] = useState<AttendanceEntry[]>([]);
+  const [workers, setWorkers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [a, w] = await Promise.all([
+          attendanceService.getAttendance(),
+          usersService.getUsers({ role: "worker", limit: 100 }),
+        ]);
+        if (cancelled) return;
+        setItems(a);
+        setWorkers(w.items);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load attendance.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const workerMap = useMemo(() => buildLookup(workers), [workers]);
+
+  const columns: Column<AttendanceEntry>[] = [
+    { key: "id", header: "Entry", render: (a) => formatId(a.id) },
+    {
+      key: "worker",
+      header: "Worker",
+      render: (a) => workerMap.get(a.workerId)?.name ?? a.worker ?? formatId(a.workerId),
+    },
+    { key: "date", header: "Date", render: (a) => formatDate(a.date) },
+    { key: "status", header: "Status", render: (a) => <StatusBadge status={a.status} /> },
+  ];
+
   return (
     <DashboardShell role="manager">
       <div className="mb-6">
@@ -21,7 +56,18 @@ export default function ManagerAttendancePage() {
           Daily attendance submitted by workers.
         </p>
       </div>
-      <DataTable<AttendanceEntry> columns={columns} rows={mockAttendance} />
+
+      {error ? (
+        <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+          {error}
+        </div>
+      ) : null}
+
+      <DataTable<AttendanceEntry>
+        columns={columns}
+        rows={items}
+        emptyMessage={loading ? "Loading attendance…" : "No attendance records."}
+      />
     </DashboardShell>
   );
 }

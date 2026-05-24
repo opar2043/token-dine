@@ -1,32 +1,55 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, StatusBadge, type Column } from "@/components/DataTable";
 import { Modal } from "@/components/Modal";
 import { PlusIcon } from "@/components/icons";
-import { mockClients, mockUsers } from "@/lib/mockData";
+import { clientsService, usersService } from "@/lib/services";
+import { formatDate, formatId } from "@/lib/format";
 import type { Client, User } from "@/lib/types";
 
 type CreateRole = "client" | "manager" | "worker";
 
-interface UsersRow extends User {}
-
-const userColumns: Column<UsersRow>[] = [
-  { key: "id", header: "ID" },
+const userColumns: Column<User>[] = [
+  { key: "id", header: "ID", render: (u) => formatId(u.id) },
   { key: "name", header: "Name" },
   { key: "role", header: "Role", render: (u) => <span className="capitalize">{u.role}</span> },
   { key: "email", header: "Email", render: (u) => u.email ?? "—" },
   { key: "mobile", header: "Mobile", render: (u) => u.mobile ?? "—" },
-  { key: "joinedOn", header: "Joined" },
+  { key: "joinedOn", header: "Joined", render: (u) => formatDate(u.joinedOn ?? u.createdAt) },
   { key: "status", header: "Status", render: (u) => <StatusBadge status={u.status} /> },
 ];
 
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState<User[]>(mockUsers);
-  const [clients, setClients] = useState<Client[]>(mockClients);
+  const [users, setUsers] = useState<User[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [open, setOpen] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [u, c] = await Promise.all([
+          usersService.getUsers({ limit: 100 }),
+          clientsService.getClients({ limit: 100 }),
+        ]);
+        if (cancelled) return;
+        setUsers(u.items);
+        setClients(c.items);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load users.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleCreateStaff = (u: User) => {
     setUsers((prev) => [u, ...prev]);
@@ -54,6 +77,12 @@ export default function AdminUsersPage() {
         </button>
       </div>
 
+      {error ? (
+        <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+          {error}
+        </div>
+      ) : null}
+
       {flash ? (
         <div className="mb-4 flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
           <span>{flash}</span>
@@ -63,7 +92,11 @@ export default function AdminUsersPage() {
         </div>
       ) : null}
 
-      <DataTable<UsersRow> columns={userColumns} rows={users} />
+      <DataTable<User>
+        columns={userColumns}
+        rows={users}
+        emptyMessage={loading ? "Loading users…" : "No users found."}
+      />
 
       <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
         Showing {users.length} system user(s). Clients ({clients.length}) live on the{" "}
@@ -110,7 +143,6 @@ function CreateForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"active" | "blocked">("active");
-  // client-only
   const [nid, setNid] = useState("");
   const [address, setAddress] = useState("");
   const [gender, setGender] = useState<"male" | "female" | "other" | "">("");
@@ -118,10 +150,11 @@ function CreateForm({
   const [tokensBought, setTokensBought] = useState(0);
   const [rating, setRating] = useState(4);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const isClient = role === "client";
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -134,61 +167,59 @@ function CreateForm({
       return;
     }
 
-    if (isClient) {
-      if (!nid.trim()) {
-        setError("NID is required for clients.");
+    setSubmitting(true);
+
+    try {
+      if (isClient) {
+        if (!nid.trim()) {
+          setError("NID is required for clients.");
+          return;
+        }
+        if (existingClients.some((c) => c.mobile === mobile.trim())) {
+          setError("A client with that mobile already exists.");
+          return;
+        }
+        const created = await clientsService.createClients({
+          name: name.trim(),
+          mobile: mobile.trim(),
+          nid: nid.trim(),
+          email: email.trim() || undefined,
+          address: address.trim() || undefined,
+          gender: gender || undefined,
+          referral: referral.trim() || undefined,
+          rating,
+          tokensBought,
+        });
+        onCreateClient(created);
         return;
       }
-      if (existingClients.some((c) => c.mobile === mobile.trim())) {
-        setError("A client with that mobile already exists.");
+
+      if (!password || password.length < 4) {
+        setError("Password / PIN must be at least 4 characters.");
         return;
       }
-      const id = `C-${Math.floor(Math.random() * 9000 + 1000)}`;
-      const next: Client = {
-        id,
+      if (existingUsers.some((u) => u.mobile === mobile.trim())) {
+        setError("A staff user with that mobile already exists.");
+        return;
+      }
+      const created = await usersService.createUsers({
         name: name.trim(),
         mobile: mobile.trim(),
-        nid: nid.trim(),
         email: email.trim() || undefined,
-        address: address.trim() || undefined,
-        gender: gender || undefined,
-        referral: referral.trim() || undefined,
-        rating,
-        tokensBought,
-        tokensSpent: 0,
-        balance: tokensBought,
-        createdAt: new Date().toISOString().slice(0, 10),
-      };
-      onCreateClient(next);
-      return;
+        password,
+        role,
+        status,
+      });
+      onCreateStaff(created);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create user.");
+    } finally {
+      setSubmitting(false);
     }
-
-    // manager / worker
-    if (!password || password.length < 4) {
-      setError("Password / PIN must be at least 4 characters.");
-      return;
-    }
-    if (existingUsers.some((u) => u.mobile === mobile.trim())) {
-      setError("A staff user with that mobile already exists.");
-      return;
-    }
-    const prefix = role === "manager" ? "M" : "W";
-    const id = `${prefix}-${Math.floor(Math.random() * 900 + 100)}`;
-    const next: User = {
-      id,
-      name: name.trim(),
-      mobile: mobile.trim(),
-      email: email.trim() || undefined,
-      role,
-      status,
-      joinedOn: new Date().toISOString().slice(0, 10),
-    };
-    onCreateStaff(next);
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      {/* role selector */}
       <div className="grid grid-cols-3 gap-2 rounded-xl bg-slate-100 p-1 dark:bg-slate-900">
         {(["client", "manager", "worker"] as CreateRole[]).map((r) => (
           <button
@@ -305,11 +336,11 @@ function CreateForm({
       ) : null}
 
       <div className="flex items-center justify-end gap-2">
-        <button type="button" className="btn-ghost" onClick={onCancel}>
+        <button type="button" className="btn-ghost" onClick={onCancel} disabled={submitting}>
           Cancel
         </button>
-        <button type="submit" className="btn-primary">
-          Create {role}
+        <button type="submit" className="btn-primary" disabled={submitting}>
+          {submitting ? "Creating…" : `Create ${role}`}
         </button>
       </div>
     </form>

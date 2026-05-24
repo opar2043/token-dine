@@ -25,7 +25,9 @@ export default function RegisterPage() {
     }
   }, [user, loading, router]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -42,14 +44,21 @@ export default function RegisterPage() {
       return;
     }
 
-    const created = register({
-      name: name.trim(),
-      mobile: mobile.trim(),
-      email: email.trim() || undefined,
-      password,
-      role,
-    });
-    router.replace(`/dashboard/${created.role}`);
+    setSubmitting(true);
+    try {
+      const created = await register({
+        name: name.trim(),
+        mobile: mobile.trim(),
+        email: email.trim() || undefined,
+        password,
+        role,
+      });
+      router.replace(`/dashboard/${created.role}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Registration failed.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -167,8 +176,8 @@ export default function RegisterPage() {
                 </p>
               ) : null}
 
-              <button type="submit" className="btn-primary w-full">
-                Create account
+              <button type="submit" className="btn-primary w-full" disabled={submitting}>
+                {submitting ? "Creating…" : "Create account"}
               </button>
             </form>
 

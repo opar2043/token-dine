@@ -1,66 +1,107 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, type Column } from "@/components/DataTable";
 import { Modal } from "@/components/Modal";
 import { StatCard } from "@/components/StatCard";
 import { EditIcon, EyeIcon, PlusIcon, TrashIcon } from "@/components/icons";
-import {
-  mockClientPurchases,
-  mockClients,
-  mockProducts,
-} from "@/lib/mockData";
-import type { Client, ClientPurchase } from "@/lib/types";
+import { clientsService, productsService } from "@/lib/services";
+import { formatDate, formatId } from "@/lib/format";
+import type { Client, ClientPurchase, Product } from "@/lib/types";
 
 type Mode = "view" | "edit" | "delete" | null;
 type Range = "today" | "week" | "month" | "all";
 
-function withinRange(dateStr: string, range: Range): boolean {
-  if (range === "all") return true;
-  const today = new Date("2026-05-21T00:00:00Z");
-  const d = new Date(dateStr + "T00:00:00Z");
-  const diffDays = Math.floor((today.getTime() - d.getTime()) / 86_400_000);
-  if (range === "today") return diffDays === 0;
-  if (range === "week") return diffDays >= 0 && diffDays < 7;
-  if (range === "month") return diffDays >= 0 && diffDays < 30;
-  return true;
-}
-
 export default function AdminClientsPage() {
-  const [clients, setClients] = useState<Client[]>(mockClients);
-  const [purchases, setPurchases] = useState<ClientPurchase[]>(mockClientPurchases);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [purchases, setPurchases] = useState<ClientPurchase[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>(null);
   const [range, setRange] = useState<Range>("all");
   const [createOpen, setCreateOpen] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [c, p] = await Promise.all([
+          clientsService.getClients({ limit: 100 }),
+          productsService.getProducts(),
+        ]);
+        if (cancelled) return;
+        setClients(c.items);
+        setProducts(p);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load clients.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const selected = useMemo(
     () => clients.find((c) => c.id === selectedId) ?? null,
     [clients, selectedId],
   );
 
-  const open = (id: string, m: Mode) => {
+  const open = async (id: string, m: Mode) => {
     setSelectedId(id);
     setMode(m);
     setRange("all");
+    if (m === "view" || m === "edit") {
+      try {
+        const items = await clientsService.getClientPurchases(id);
+        setPurchases(items);
+      } catch {
+        setPurchases([]);
+      }
+    }
   };
+
   const close = () => {
     setMode(null);
     setSelectedId(null);
+    setPurchases([]);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!selected) return;
-    setClients((prev) => prev.filter((c) => c.id !== selected.id));
-    setPurchases((prev) => prev.filter((p) => p.clientId !== selected.id));
-    close();
+    try {
+      await clientsService.deleteClients(selected.id);
+      setClients((prev) => prev.filter((c) => c.id !== selected.id));
+      close();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete client.");
+    }
   };
 
-  const handleSave = (next: Client) => {
-    setClients((prev) => prev.map((c) => (c.id === next.id ? next : c)));
-    close();
+  const handleSave = async (next: Client) => {
+    try {
+      const updated = await clientsService.updateClients(next.id, {
+        name: next.name,
+        mobile: next.mobile,
+        nid: next.nid,
+        email: next.email,
+        address: next.address,
+        gender: next.gender,
+        referral: next.referral,
+        rating: next.rating,
+        tokensBought: next.tokensBought,
+        tokensSpent: next.tokensSpent,
+      });
+      setClients((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+      close();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update client.");
+    }
   };
 
   const handleCreate = (next: Client) => {
@@ -68,23 +109,23 @@ export default function AdminClientsPage() {
     setCreateOpen(false);
   };
 
-  const handleAddPurchase = (purchase: ClientPurchase) => {
-    setPurchases((prev) => [purchase, ...prev]);
-    setClients((prev) =>
-      prev.map((c) =>
-        c.id === purchase.clientId
-          ? {
-              ...c,
-              tokensSpent: c.tokensSpent + purchase.tokensUsed,
-              balance: c.balance - purchase.tokensUsed,
-            }
-          : c,
-      ),
-    );
+  const handleAddPurchase = async (clientId: string, productId: string, qty: number, tokensUsed: number) => {
+    try {
+      const purchase = await clientsService.addClientPurchase(clientId, {
+        productId,
+        qty,
+        tokensUsed,
+      });
+      setPurchases((prev) => [purchase, ...prev]);
+      const refreshed = await clientsService.getClient(clientId);
+      setClients((prev) => prev.map((c) => (c.id === clientId ? refreshed : c)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add purchase.");
+    }
   };
 
   const columns: Column<Client>[] = [
-    { key: "id", header: "Client ID" },
+    { key: "id", header: "Client ID", render: (c) => formatId(c.id) },
     { key: "name", header: "Name" },
     { key: "mobile", header: "Mobile" },
     { key: "nid", header: "NID" },
@@ -134,27 +175,35 @@ export default function AdminClientsPage() {
         </button>
       </div>
 
-      <DataTable<Client> columns={columns} rows={clients} />
+      {error ? (
+        <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+          {error}
+        </div>
+      ) : null}
 
-      {/* VIEW MODAL */}
+      <DataTable<Client>
+        columns={columns}
+        rows={clients}
+        emptyMessage={loading ? "Loading clients…" : "No clients yet."}
+      />
+
       <Modal
         open={mode === "view" && !!selected}
         onClose={close}
         size="lg"
-        title={selected ? `${selected.name} • ${selected.id}` : "Client"}
+        title={selected ? `${selected.name} • ${formatId(selected.id)}` : "Client"}
         description={selected ? `Mobile: ${selected.mobile} • NID: ${selected.nid}` : undefined}
       >
         {selected ? (
           <ViewContent
             client={selected}
-            purchases={purchases.filter((p) => p.clientId === selected.id)}
+            purchases={purchases}
             range={range}
             onRangeChange={setRange}
           />
         ) : null}
       </Modal>
 
-      {/* EDIT MODAL */}
       <Modal
         open={mode === "edit" && !!selected}
         onClose={close}
@@ -165,15 +214,17 @@ export default function AdminClientsPage() {
         {selected ? (
           <EditContent
             client={selected}
-            purchases={purchases.filter((p) => p.clientId === selected.id)}
+            products={products}
+            purchases={purchases}
             onSave={handleSave}
-            onAddPurchase={handleAddPurchase}
+            onAddPurchase={(productId, qty, tokensUsed) =>
+              handleAddPurchase(selected.id, productId, qty, tokensUsed)
+            }
             onCancel={close}
           />
         ) : null}
       </Modal>
 
-      {/* DELETE MODAL */}
       <Modal
         open={mode === "delete" && !!selected}
         onClose={close}
@@ -197,13 +248,11 @@ export default function AdminClientsPage() {
       >
         {selected ? (
           <p className="text-sm text-slate-600 dark:text-slate-300">
-            You are about to remove <strong>{selected.name}</strong> ({selected.id}) along with{" "}
-            {purchases.filter((p) => p.clientId === selected.id).length} purchase record(s).
+            You are about to remove <strong>{selected.name}</strong>.
           </p>
         ) : null}
       </Modal>
 
-      {/* CREATE MODAL */}
       <Modal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
@@ -249,9 +298,17 @@ function IconButton({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* VIEW                                                                */
-/* ------------------------------------------------------------------ */
+function withinRange(dateStr: string, range: Range): boolean {
+  if (range === "all") return true;
+  const now = new Date();
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return false;
+  const diffDays = Math.floor((now.getTime() - d.getTime()) / 86_400_000);
+  if (range === "today") return diffDays === 0;
+  if (range === "week") return diffDays >= 0 && diffDays < 7;
+  if (range === "month") return diffDays >= 0 && diffDays < 30;
+  return true;
+}
 
 function ViewContent({
   client,
@@ -281,7 +338,7 @@ function ViewContent({
   ];
 
   const columns: Column<ClientPurchase>[] = [
-    { key: "date", header: "Date" },
+    { key: "date", header: "Date", render: (p) => formatDate(p.date) },
     { key: "productName", header: "Item" },
     { key: "qty", header: "Qty", align: "right" },
     { key: "tokensUsed", header: "Tokens", align: "right" },
@@ -295,7 +352,7 @@ function ViewContent({
         <ProfileRow label="Address" value={client.address ?? "—"} />
         <ProfileRow label="Gender" value={client.gender ?? "—"} />
         <ProfileRow label="Referral" value={client.referral ?? "—"} />
-        <ProfileRow label="Joined" value={client.createdAt} />
+        <ProfileRow label="Joined" value={formatDate(client.createdAt)} />
         <ProfileRow label="Rating" value={`${client.rating.toFixed(1)} / 5`} />
       </section>
 
@@ -367,27 +424,23 @@ function Mini({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* EDIT                                                                */
-/* ------------------------------------------------------------------ */
-
 function EditContent({
   client,
+  products,
   purchases,
   onSave,
   onAddPurchase,
   onCancel,
 }: {
   client: Client;
+  products: Product[];
   purchases: ClientPurchase[];
   onSave: (next: Client) => void;
-  onAddPurchase: (p: ClientPurchase) => void;
+  onAddPurchase: (productId: string, qty: number, tokensUsed: number) => void;
   onCancel: () => void;
 }) {
   const [form, setForm] = useState<Client>(client);
-
-  // new purchase fields
-  const [productId, setProductId] = useState(mockProducts[0]?.id ?? "");
+  const [productId, setProductId] = useState(products[0]?.id ?? "");
   const [qty, setQty] = useState(1);
   const [tokensUsed, setTokensUsed] = useState(1);
 
@@ -395,21 +448,8 @@ function EditContent({
     setForm((prev) => ({ ...prev, [key]: value }));
 
   const handleAddItem = () => {
-    const product = mockProducts.find((p) => p.id === productId);
-    if (!product || qty < 1 || tokensUsed < 1) return;
-    const purchase: ClientPurchase = {
-      id: `CP-${Math.floor(Math.random() * 9000 + 1000)}`,
-      clientId: form.id,
-      productId: product.id,
-      productName: product.name,
-      qty,
-      tokensUsed,
-      amount: product.sellingPrice * qty,
-      date: new Date().toISOString().slice(0, 10),
-    };
-    onAddPurchase(purchase);
-    update("tokensSpent", form.tokensSpent + tokensUsed);
-    update("balance", form.balance - tokensUsed);
+    if (!productId || qty < 1 || tokensUsed < 1) return;
+    onAddPurchase(productId, qty, tokensUsed);
     setQty(1);
     setTokensUsed(1);
   };
@@ -509,17 +549,8 @@ function EditContent({
             onChange={(e) => update("tokensSpent", Number(e.target.value) || 0)}
           />
         </Field>
-        <Field label="Balance">
-          <input
-            type="number"
-            className="input"
-            value={form.balance}
-            onChange={(e) => update("balance", Number(e.target.value) || 0)}
-          />
-        </Field>
       </section>
 
-      {/* MENU / PURCHASE ADD */}
       <section className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
         <div className="mb-3 flex items-center justify-between">
           <div>
@@ -527,7 +558,7 @@ function EditContent({
               Add menu purchase
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Append a new item to this client's purchase history.
+              Append a new item to this client&apos;s purchase history.
             </p>
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -541,7 +572,7 @@ function EditContent({
             value={productId}
             onChange={(e) => setProductId(e.target.value)}
           >
-            {mockProducts.map((p) => (
+            {products.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} (৳ {p.sellingPrice})
               </option>
@@ -601,10 +632,6 @@ function Field({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* CREATE                                                              */
-/* ------------------------------------------------------------------ */
-
 function CreateClientForm({
   existing,
   onCancel,
@@ -624,8 +651,9 @@ function CreateClientForm({
   const [tokensBought, setTokensBought] = useState(0);
   const [rating, setRating] = useState(4);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -636,23 +664,25 @@ function CreateClientForm({
     if (existing.some((c) => c.mobile === mobile.trim()))
       return setError("A client with that mobile already exists.");
 
-    const id = `C-${Math.floor(Math.random() * 9000 + 1000)}`;
-    const next: Client = {
-      id,
-      name: name.trim(),
-      mobile: mobile.trim(),
-      nid: nid.trim(),
-      email: email.trim() || undefined,
-      address: address.trim() || undefined,
-      gender: gender || undefined,
-      referral: referral.trim() || undefined,
-      rating,
-      tokensBought,
-      tokensSpent: 0,
-      balance: tokensBought,
-      createdAt: new Date().toISOString().slice(0, 10),
-    };
-    onCreate(next);
+    setSubmitting(true);
+    try {
+      const created = await clientsService.createClients({
+        name: name.trim(),
+        mobile: mobile.trim(),
+        nid: nid.trim(),
+        email: email.trim() || undefined,
+        address: address.trim() || undefined,
+        gender: gender || undefined,
+        referral: referral.trim() || undefined,
+        rating,
+        tokensBought,
+      });
+      onCreate(created);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create client.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -728,11 +758,11 @@ function CreateClientForm({
       ) : null}
 
       <div className="flex items-center justify-end gap-2">
-        <button type="button" className="btn-ghost" onClick={onCancel}>
+        <button type="button" className="btn-ghost" onClick={onCancel} disabled={submitting}>
           Cancel
         </button>
-        <button type="submit" className="btn-primary">
-          Create client
+        <button type="submit" className="btn-primary" disabled={submitting}>
+          {submitting ? "Creating…" : "Create client"}
         </button>
       </div>
     </form>

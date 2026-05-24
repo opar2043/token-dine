@@ -1,43 +1,61 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, StatusBadge, type Column } from "@/components/DataTable";
 import { StatCard } from "@/components/StatCard";
-import {
-  mockClients,
-  mockProducts,
-  mockSales,
-  mockUsers,
-} from "@/lib/mockData";
-import type { User } from "@/lib/types";
+import { analyticsService, usersService } from "@/lib/services";
+import { formatDate, formatId } from "@/lib/format";
+import type { AnalyticsOverview, User } from "@/lib/types";
 
 const userColumns: Column<User>[] = [
-  { key: "id", header: "ID" },
+  { key: "id", header: "ID", render: (u) => formatId(u.id) },
   { key: "name", header: "Name" },
   { key: "role", header: "Role", render: (u) => <span className="capitalize">{u.role}</span> },
   { key: "contact", header: "Contact", render: (u) => u.email ?? u.mobile ?? "—" },
-  { key: "joinedOn", header: "Joined" },
+  { key: "joinedOn", header: "Joined", render: (u) => formatDate(u.joinedOn ?? u.createdAt) },
   { key: "status", header: "Status", render: (u) => <StatusBadge status={u.status} /> },
 ];
 
-function sumAmount(dates: string[]) {
-  return mockSales
-    .filter((s) => dates.includes(s.date))
-    .reduce((sum, s) => sum + s.amount, 0);
-}
-
 export default function AdminDashboardPage() {
-  const totalRevenue = mockSales.reduce((sum, s) => sum + s.amount, 0);
-  const totalCost = mockProducts.reduce((sum, p) => sum + p.costPrice * (50 - p.stock), 0);
-  const profit = totalRevenue - Math.max(totalCost, 0);
+  const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const daily = sumAmount(["2026-05-21"]);
-  const weekly = sumAmount(["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21"]);
-  const monthly = totalRevenue;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [ov, usersRes] = await Promise.all([
+          analyticsService.getOverview(),
+          usersService.getUsers({ limit: 100 }),
+        ]);
+        if (cancelled) return;
+        setOverview(ov);
+        setUsers(usersRes.items);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load dashboard.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const referralCount = mockClients.filter((c) => c.referral).length;
-  const lowStock = mockProducts.filter((p) => p.status !== "in-stock").length;
-  const totalTokensSold = mockSales.reduce((sum, s) => sum + s.tokens, 0);
+  const totalRevenue = overview?.revenue.total ?? 0;
+  const daily = overview?.revenue.day ?? 0;
+  const weekly = overview?.revenue.week ?? 0;
+  const monthly = overview?.revenue.month ?? 0;
+
+  const totalClients = overview?.activeClients ?? 0;
+  const totalWorkers = users.filter((u) => u.role === "worker").length;
+  const totalTokensSold = overview?.tokensSold ?? 0;
+  const profit = overview?.profitEstimate ?? 0;
+  const referralCount = overview?.referralCount ?? 0;
+  const lowStock = overview?.stockAlerts ?? 0;
 
   return (
     <DashboardShell role="admin">
@@ -48,6 +66,12 @@ export default function AdminDashboardPage() {
         </p>
       </div>
 
+      {error ? (
+        <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+          {error}
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total Revenue" value={`৳ ${totalRevenue.toLocaleString()}`} hint="All time" />
         <StatCard label="Daily Revenue" value={`৳ ${daily.toLocaleString()}`} hint="Today" />
@@ -56,24 +80,26 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total Clients" value={mockClients.length} />
-        <StatCard label="Active Clients" value={mockClients.filter((c) => c.balance > 0).length} hint="With token balance" />
-        <StatCard label="Total Workers" value={mockUsers.filter((u) => u.role === "worker").length} />
+        <StatCard label="Active Clients" value={totalClients} hint="With token balance" />
+        <StatCard label="Total Workers" value={totalWorkers} />
         <StatCard label="Tokens Sold" value={totalTokensSold} hint="All workers" />
+        <StatCard label="Stock Alerts" value={lowStock} hint="Low or out of stock" />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Profit (est.)" value={`৳ ${profit.toLocaleString()}`} hint="Revenue − cost basis" />
-        <StatCard label="Stock Alerts" value={lowStock} hint="Low or out of stock" />
         <StatCard label="Referrals" value={referralCount} hint="Clients invited by others" />
-        <StatCard label="Product Sales" value={mockSales.length} hint="Transactions" />
       </div>
 
       <section className="mt-8">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">All system users</h2>
         </div>
-        <DataTable<User> columns={userColumns} rows={mockUsers} />
+        <DataTable<User>
+          columns={userColumns}
+          rows={users}
+          emptyMessage={loading ? "Loading users…" : "No users found."}
+        />
       </section>
     </DashboardShell>
   );

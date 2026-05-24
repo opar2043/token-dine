@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
+import { clientsService } from "@/lib/services";
+import { formatId } from "@/lib/format";
 
 interface Form {
   name: string;
@@ -26,15 +28,39 @@ const empty: Form = {
 export default function WorkerNewClientPage() {
   const [form, setForm] = useState<Form>(empty);
   const [saved, setSaved] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const update = (key: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const id = `C-${Math.floor(Math.random() * 9000 + 1000)}`;
-    setSaved(id);
-    setForm(empty);
+    setError(null);
+
+    if (!form.name.trim()) return setError("Name is required.");
+    if (!/^01\d{9}$/.test(form.mobile.trim()))
+      return setError("Mobile must be 11 digits starting with 01.");
+    if (!form.nid.trim()) return setError("NID is required.");
+
+    setSubmitting(true);
+    try {
+      const created = await clientsService.createClients({
+        name: form.name.trim(),
+        mobile: form.mobile.trim(),
+        nid: form.nid.trim(),
+        email: form.email.trim() || undefined,
+        address: form.address.trim() || undefined,
+        gender: form.gender || undefined,
+        referral: form.referral.trim() || undefined,
+      });
+      setSaved(created.id);
+      setForm(empty);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create client.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -48,7 +74,13 @@ export default function WorkerNewClientPage() {
 
       {saved ? (
         <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-          Client created with ID <strong>{saved}</strong>.
+          Client created with ID <strong>{formatId(saved)}</strong>.
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+          {error}
         </div>
       ) : null}
 
@@ -81,8 +113,8 @@ export default function WorkerNewClientPage() {
         </Field>
 
         <div className="md:col-span-2 flex justify-end">
-          <button type="submit" className="btn-primary">
-            Create client
+          <button type="submit" className="btn-primary" disabled={submitting}>
+            {submitting ? "Creating…" : "Create client"}
           </button>
         </div>
       </form>

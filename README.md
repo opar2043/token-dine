@@ -1,78 +1,51 @@
-# Restaurant Token & Staff Management System
+# Token Dine — Frontend
 
-A digital platform for running a restaurant's day-to-day operations: clients, tokens, staff, attendance, products, inventory, bonuses, referrals, reports, and analytics. Frontend is built with **Next.js (App Router) + TypeScript + Tailwind CSS**, is fully mobile-responsive, supports light & dark mode, and uses the **Poppins** font.
+Restaurant management dashboard for **Token Dine**. Built with **Next.js 14 (App Router) + TypeScript + Tailwind CSS**. Three role-based dashboards (Admin / Manager / Worker), fully wired to the live REST backend.
 
-> **State of the project**: the **frontend is complete** and runs against in-memory mock data + a `localStorage`-backed auth simulation. A separate MongoDB backend is described in [`backend.md`](./backend.md). The frontend was designed so that connecting the backend is a drop-in replacement of `lib/mockData.ts` and three functions in `context/AuthContext.tsx` — no UI rewrites required.
+- **Backend API:** `https://tokendinerestaurent.vercel.app`
+- **Stack:** Next.js 14 · React 18 · TypeScript · Tailwind CSS · Axios
+- **Theming:** Light / Dark mode toggle (persisted)
+- **Font:** Poppins via `next/font/google`
 
 ---
 
-## 1. How the System Works
+## 1. Project Overview
 
-### 1.1 Roles & access
+Token Dine digitizes the day-to-day operations of a restaurant that runs on a **prepaid token system**: clients buy tokens, workers redeem them against menu items, and managers/admins track sales, attendance, inventory, bonuses, complaints, and referrals.
 
-| Role        | How they log in                  | Has dashboard?   |
-| ----------- | -------------------------------- | ---------------- |
-| **Admin**   | email + password                 | Yes — full control |
-| **Manager** | mobile + password                | Yes — team & operations |
-| **Worker**  | mobile + password / PIN          | Yes — daily sales & service |
-| **Client**  | does not log in                  | No — record-only |
+The frontend is **fully connected to the live backend** — there is no more mock data. Every page loads from the API on mount and writes through service objects.
 
-Public routes are only `/login` and `/register`. Everything else is behind a role-aware route guard (`components/DashboardShell.tsx`). If a user opens a route for a different role, they are bounced to their own dashboard.
+### Roles
 
-### 1.2 Business flow
+| Role        | Login                            | Dashboard                                        |
+| ----------- | -------------------------------- | ------------------------------------------------ |
+| **Admin**   | email + password                 | Full control — users, clients, products, analytics |
+| **Manager** | mobile + password                | Team, daily progress, inventory, tables          |
+| **Worker**  | mobile + password / PIN          | Sell tokens, attendance, clients, complaints     |
+| **Client**  | does not log in                  | Record-only — managed by workers/admin           |
 
-```
-                ┌──────────────────────────────┐
-                │  Worker searches client by   │
-                │  mobile / NID                │
-                └──────────────┬───────────────┘
-                               │
-                  ┌────────────┴────────────┐
-                  │ Found?                  │
-                  └────────────┬────────────┘
-                               │
-            yes ◄──────────────┴────────────► no
-            │                                  │
-   Load purchase history              ┌────────┴─────────┐
-   and token balance                  │ Worker creates   │
-            │                         │ new client       │
-            │                         │ (+ referral)     │
-            └──────────────┬──────────┘
-                           │
-                           ▼
-                ┌──────────────────────────┐
-                │ Client buys tokens       │
-                │ (Sell Token form)        │
-                └──────────────┬───────────┘
-                               │
-                               ▼
-                ┌──────────────────────────┐
-                │ Client spends tokens on  │
-                │ menu items (purchases)   │
-                └──────────────┬───────────┘
-                               │
-                               ▼
-                ┌──────────────────────────┐
-                │ System auto-calculates   │
-                │ spent + remaining        │
-                └──────────────────────────┘
-```
+### Business flow
 
-### 1.3 Referral system
+1. A worker searches for a client by mobile or NID.
+2. If new, the worker creates the client (optional referral mobile → referrer gets bonus tokens).
+3. Worker sells tokens to the client (`POST /sales`).
+4. Worker records menu purchases (`POST /clients/:id/purchases`) — stock decrements, token balance deducts.
+5. Manager logs daily token-given vs token-sold per worker (negative balances flagged red).
+6. Admin reviews revenue, profit, attendance, and assigns bonuses.
 
-When a worker creates a client, they may enter the **mobile number of an existing client** as a referrer. The backend will credit that referrer with a configurable number of bonus tokens (default `5`).
+### Referral bonus
 
-### 1.4 Bonus system
+When a new client is registered with `referral = <existing-client-mobile>`, the referrer is auto-credited (default 5 tokens, configurable on the backend via `REFERRAL_BONUS_TOKENS`).
 
-Bonuses are assigned by admin, often based on a manager's recommendation. The manager's *Bonuses* page auto-flags workers as **Recommend bonus** when:
+### Bonus recommendation rule
+
+The manager's *Bonuses* page auto-flags a worker as **Recommend bonus** when:
 
 ```
 attendanceRate ≥ 90%  AND  tokensSold ≥ 250  AND  rating ≥ 4
 ```
 
-### 1.5 Inventory
-
-Products have a cost price, selling price, and stock count. Stock decrements automatically when a worker records a purchase. Status is **derived from stock**:
+### Inventory status (derived from stock on the backend)
 
 | Status         | Condition           |
 | -------------- | ------------------- |
@@ -80,222 +53,264 @@ Products have a cost price, selling price, and stock count. Stock decrements aut
 | `low-stock`    | `1 ≤ stock < 10`    |
 | `out-of-stock` | `stock = 0`         |
 
-### 1.6 Attendance & complaints
-
-Workers click a single button to mark themselves present (date/time captured automatically). Workers and managers can file complaints; admins and managers move them through `open → in-progress → resolved`.
-
-### 1.7 Daily progress
-
-Managers record, per worker per day: tokens given to the worker, tokens they sold, and the balance. **Negative balances render in red** because they mean the worker sold from an unaccounted-for float — a flag for review.
-
 ---
 
-## 2. Tech Stack
+## 2. Architecture
 
-- **Next.js 14** (App Router)
-- **TypeScript** strict mode
-- **Tailwind CSS** with `darkMode: "class"`
-- **Poppins** via `next/font/google`
-- React Context for auth + theme, `localStorage` for persistence
-- No external UI library — all components are hand-built in `components/` for full control
-
-The backend (separate repo) is documented in [`backend.md`](./backend.md). Recommended stack there: **Node + Express + Mongoose + MongoDB + JWT**.
-
----
-
-## 3. Getting Started
-
-```bash
-# from this directory
-npm install
-npm run dev
+```
+┌─────────────────────────────────────────────────────────────┐
+│  React Component (e.g. AdminClientsPage)                    │
+│  └─ useEffect ▶ clientsService.getClients()                 │
+└─────────────────────────────────────────────────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  lib/services/clients.route.ts                              │
+│  └─ exports clientsService = { getClients, createClients… } │
+└─────────────────────────────────────────────────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  lib/api.ts                                                 │
+│  └─ axios instance (baseURL, timeout, error interceptor)    │
+└─────────────────────────────────────────────────────────────┘
+                          ▼
+        https://tokendinerestaurent.vercel.app/clients
 ```
 
-Open <http://localhost:3000>. Unauthenticated users are redirected to `/login`.
+Every backend resource has a matching `*.route.ts` service file. Pages never call `axios` directly — they always go through a service. Cross-entity name lookups (worker name for a sale, etc.) are joined client-side via a small `buildLookup` helper in [lib/format.ts](./lib/format.ts).
+
+---
+
+## 3. Authentication
+
+> **Note:** This is **custom authentication**, not full authorization. Login returns a user object which is persisted to `localStorage` (`restaurant-auth-user`); no JWT or session token is issued, and the backend does not currently gate endpoints by role. Suitable for an internal demo / prototype.
+
+| Identifier      | Endpoint                  | Stored as            |
+| --------------- | ------------------------- | -------------------- |
+| Admin email     | `POST /auth/login/admin`  | `restaurant-auth-user` (localStorage) |
+| Staff mobile    | `POST /auth/login/staff`  | `restaurant-auth-user` (localStorage) |
+| Registration    | `POST /auth/register`     | same                 |
+| Logout          | `POST /auth/logout`       | cleared              |
+
+Theme preference is stored under `restaurant-theme`. Blocked accounts (`status: "blocked"`) cannot log in.
+
+---
+
+## 4. Tech Stack
+
+- **Next.js 14** (App Router, React Server Components disabled per-page via `"use client"`)
+- **TypeScript** strict mode
+- **Tailwind CSS** with `darkMode: "class"`
+- **Axios** for HTTP, with a response interceptor that normalizes backend `{ error }` payloads into proper `Error` messages
+- **React Context** for auth + theme; `localStorage` for persistence
+- **Poppins** via `next/font/google`
+- No external UI library — all primitives are hand-built in `components/`
+
+---
+
+## 5. Getting Started
+
+```bash
+npm install
+npm run dev          # http://localhost:3000
+```
 
 Other scripts:
 
 ```bash
-npm run build   # production build (verifies all routes typecheck)
-npm run start   # serve the production build
-npm run lint    # next lint
+npm run build        # production build (all 31 routes prerender)
+npm run start        # serve the production build
+npm run lint         # next lint
 ```
 
----
+### Demo credentials
 
-## 4. Demo Credentials
+These are seeded by `POST https://tokendinerestaurent.vercel.app/seed` (destructive — wipes & reseeds users/clients/products):
 
-No backend is wired up yet, so login is simulated against seeded users in `lib/mockData.ts`.
-
-**Any non-empty password works for these demo accounts** — use `12345` everywhere:
-
-| Role    | Login mode | Identifier             | Password | Notes                              |
-| ------- | ---------- | ---------------------- | -------- | ---------------------------------- |
-| Admin   | Email      | `admin@restaurant.com` | `12345`  |                                    |
-| Manager | Mobile     | `01710000001`          | `12345`  |                                    |
-| Manager | Mobile     | `01710000002`          | `12345`  |                                    |
-| Worker  | Mobile     | `01810000001`          | `12345`  |                                    |
-| Worker  | Mobile     | `01810000002`          | `12345`  |                                    |
-| Worker  | Mobile     | `01810000003`          | `12345`  | **blocked** — login denied         |
-
-Switch between admin email and staff-mobile flows using the tab on `/login`. You can also create a fresh **Worker** or **Manager** via `/register` (min 4-char password, 11-digit mobile starting with `01`).
-
-To reset the demo: DevTools → Application → Local Storage → clear keys `restaurant-auth-user` and `restaurant-theme`.
+| Role    | Identifier             | Password |
+| ------- | ---------------------- | -------- |
+| Admin   | `admin@restaurant.com` | `12345`  |
+| Manager | `01710000001` (mobile) | `12345`  |
+| Manager | `01710000002`          | `12345`  |
+| Worker  | `01810000001`          | `12345`  |
+| Worker  | `01810000002`          | `12345`  |
+| Worker  | `01810000003`          | `12345`  *(blocked — login denied)* |
 
 ---
 
-## 5. Feature Map by Role
-
-### 5.1 Admin (`/dashboard/admin`)
-
-| Page                | What it does                                                                                |
-| ------------------- | ------------------------------------------------------------------------------------------- |
-| **Overview**        | Total / daily / weekly / monthly revenue, total clients, active clients, total workers, tokens sold, profit estimate, stock alerts, referral count, transaction count |
-| **Users**           | Lists admins / managers / workers · **Add user** modal with **role tabs** (client / manager / worker) and role-conditional fields · status badges |
-| **Clients**         | Full client table with **Actions** column: 👁 view, ✏️ edit, 🗑 delete · **New client** modal · view modal shows token KPIs + filterable purchase history (today / week / month / all) · edit modal allows rating slider + adding menu purchases to history |
-| **Products**        | SKU / image / category / cost / selling / margin / stock / dates / status · **Add product** modal with emoji picker, category dropdown, cost ≤ selling validation |
-| **Tables**          | Table-to-worker assignments, active/free counts                                             |
-| **Transactions**    | Every token sale across all workers                                                         |
-| **Attendance**      | All worker attendance entries                                                               |
-| **Bonuses**         | Bonus history with total / count / average · "Assign new bonus" entry                       |
-| **Complaints**      | Filed complaints with status                                                                |
-
-### 5.2 Manager (`/dashboard/manager`)
-
-| Page                | What it does                                                                                |
-| ------------------- | ------------------------------------------------------------------------------------------- |
-| **Overview**        | Active workers, average attendance, today's sales, tables assigned · worker table          |
-| **Workers**         | Performance: attendance %, tokens sold, bonus paid, rating                                  |
-| **Daily Progress**  | Form with worker / table / token-given / token-sold · **auto-calculated balance** (**negative → red**) · notes field · table of past entries |
-| **Tables**          | Assign / release tables                                                                     |
-| **Attendance**      | Daily attendance submitted by workers                                                       |
-| **Inventory**       | Stock list with low / out-of-stock alert banner · "Add product" entry                       |
-| **Sales**           | Token sales handled by the team                                                             |
-| **Bonuses**         | Auto-recommendation table based on rules above · history of bonuses paid                    |
-
-### 5.3 Worker (`/dashboard/worker`)
-
-| Page                | What it does                                                                                |
-| ------------------- | ------------------------------------------------------------------------------------------- |
-| **Overview**        | Clients served, tokens sold, sales total, attendance · recent sales table                   |
-| **Clients**         | Live search by name / mobile / NID                                                          |
-| **New Client**      | Full client registration form (mobile validation, NID, referral mobile field)               |
-| **Sell Token**      | Pick a client → enter tokens → optional **cart of menu items** (qty × selling price) → live remaining balance → **Finalize transaction** |
-| **Sales**           | Worker's own token sales                                                                    |
-| **My Progress**     | Personal stats + daily token-balance history (red on negatives)                             |
-| **Attendance**      | "Mark me present" single-click button + history                                             |
-| **Complaints**      | File complaints, view status                                                                |
-
----
-
-## 6. UI / UX
-
-- **Surface**: white background with black/slate text by default; dark mode swaps to slate-950 surfaces.
-- **Theme toggle** in the header on every dashboard, plus on the login and register screens. Choice persists in `localStorage`.
-- **Typography**: Poppins (300 / 400 / 500 / 600 / 700) loaded via `next/font/google` — no extra CSS imports needed.
-- **Responsive**: every page works at 360 px → 1440 px. The sidebar collapses behind a hamburger on `< lg`.
-- **Reusable primitives** (`app/globals.css`): `.card`, `.input`, `.btn-primary`, `.btn-ghost`, `.badge`.
-- **Reusable React components**: `DataTable` (with `StatusBadge`), `Modal`, `StatCard`, `Sidebar`, `Header`, `DashboardShell`, `ThemeToggle`, icon set in `components/icons.tsx`.
-
----
-
-## 7. Project Structure
+## 6. Project Structure
 
 ```
 frontend/
 ├── app/
-│   ├── layout.tsx              # Root layout, wires Poppins + Theme + Auth providers
-│   ├── page.tsx                # Entry — redirects based on auth state
-│   ├── globals.css             # Tailwind layers + .card / .input / .btn-* / .badge
-│   ├── login/page.tsx          # Admin email login / staff mobile login (tabbed)
-│   ├── register/page.tsx       # Worker / Manager self-registration
+│   ├── layout.tsx                      Root layout + Poppins + Theme + Auth providers
+│   ├── page.tsx                        Entry redirect (→ /login or /dashboard/<role>)
+│   ├── globals.css                     Tailwind layers + .card / .input / .btn-* / .badge
+│   ├── login/page.tsx                  Admin (email) + Staff (mobile) tabbed login
+│   ├── register/page.tsx               Worker / Manager self-registration
 │   └── dashboard/
-│       ├── admin/              # 9 pages: overview, users, clients, products, tables,
-│       │                       #          transactions, attendance, bonuses, complaints
-│       ├── manager/            # 8 pages: overview, workers, daily-progress, tables,
-│       │                       #          attendance, inventory, sales, bonuses
-│       └── worker/             # 8 pages: overview, clients, new-client, sell-token,
-│                               #          sales, progress, attendance, complaints
+│       ├── admin/                      9 pages: overview, users, clients, products,
+│       │                                       tables, transactions, attendance,
+│       │                                       bonuses, complaints
+│       ├── manager/                    8 pages: overview, workers, daily-progress,
+│       │                                       tables, attendance, inventory, sales,
+│       │                                       bonuses
+│       └── worker/                     8 pages: overview, clients, new-client,
+│                                               sell-token, sales, progress,
+│                                               attendance, complaints
 ├── components/
-│   ├── DashboardShell.tsx      # Sidebar + header layout + role guard
-│   ├── Sidebar.tsx             # Role-aware nav
-│   ├── Header.tsx              # Welcome strip + theme toggle + logout
-│   ├── DataTable.tsx           # Reusable table + StatusBadge
-│   ├── Modal.tsx               # Reusable modal with backdrop, ESC close, body lock
-│   ├── StatCard.tsx            # KPI card
+│   ├── DashboardShell.tsx              Sidebar + Header layout + role guard
+│   ├── Sidebar.tsx                     Role-aware navigation
+│   ├── Header.tsx                      Welcome strip + theme toggle + logout
+│   ├── DataTable.tsx                   Reusable table + StatusBadge
+│   ├── Modal.tsx                       Backdrop, ESC close, body lock
+│   ├── StatCard.tsx                    KPI card
 │   ├── ThemeToggle.tsx
-│   └── icons.tsx               # Eye / Edit / Trash / Plus inline SVGs
+│   └── icons.tsx                       Eye / Edit / Trash / Plus SVGs
 ├── context/
-│   ├── AuthContext.tsx         # user state, login/register/logout, persistence
-│   └── ThemeContext.tsx        # light/dark, persisted in localStorage
+│   ├── AuthContext.tsx                 user state, async login/register/logout
+│   └── ThemeContext.tsx                light/dark with localStorage persistence
 ├── lib/
-│   ├── types.ts                # All TypeScript types (single source of truth)
-│   └── mockData.ts             # Seeded demo data — replace with API calls when backend lands
+│   ├── api.ts                          Shared axios instance + error interceptor
+│   ├── services/                       One *.route.ts per backend resource
+│   │   ├── index.ts                    Barrel export
+│   │   ├── auth.route.ts               authService
+│   │   ├── users.route.ts              usersService
+│   │   ├── clients.route.ts            clientsService
+│   │   ├── products.route.ts           productsService
+│   │   ├── sales.route.ts              salesService
+│   │   ├── attendance.route.ts         attendanceService
+│   │   ├── complaints.route.ts         complaintsService
+│   │   ├── bonuses.route.ts            bonusesService
+│   │   ├── tables.route.ts             tablesService
+│   │   ├── progress.route.ts           progressService
+│   │   └── analytics.route.ts          analyticsService
+│   ├── types.ts                        Single source of truth for entity types
+│   └── format.ts                       formatDate, formatId, buildLookup helpers
 ├── tailwind.config.ts
 ├── tsconfig.json
 ├── next.config.js
 ├── package.json
-├── README.md                   # this file
-└── backend.md                  # MongoDB backend specification
+└── README.md                           this file
 ```
 
 ---
 
-## 8. Data Model (frontend types)
+## 7. API Services
 
-All types live in `lib/types.ts` and are the single source of truth. They mirror the MongoDB collections described in `backend.md`.
+All HTTP calls go through `lib/services/*.route.ts`. Import either the specific service or use the barrel:
 
-- `User` (admin / manager / worker)
+```ts
+import { clientsService, usersService } from "@/lib/services";
+
+const { items } = await clientsService.getClients({ q: "Arif", limit: 50 });
+const user = await usersService.createUsers({ name, mobile, password, role: "worker" });
+```
+
+| Service               | Methods                                                                                                    |
+| --------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `authService`         | `loginAdmin`, `loginStaff`, `register`, `logout`                                                           |
+| `usersService`        | `getUsers`, `getUser`, `createUsers`, `updateUsers`, `updateUserStatus`, `deleteUsers`                     |
+| `clientsService`      | `getClients`, `getClient`, `createClients`, `updateClients`, `deleteClients`, `getClientPurchases`, `addClientPurchase` |
+| `productsService`     | `getProducts`, `createProducts`, `updateProducts`, `deleteProducts`                                        |
+| `salesService`        | `getSales`, `createSales`                                                                                  |
+| `attendanceService`   | `getAttendance`, `checkInAttendance`, `updateAttendanceStatus`                                             |
+| `complaintsService`   | `getComplaints`, `createComplaints`, `updateComplaintStatus`                                               |
+| `bonusesService`      | `getBonuses`, `createBonuses`                                                                              |
+| `tablesService`       | `getTables`, `assignTables`, `releaseTables`                                                               |
+| `progressService`     | `getProgress`, `createProgress`                                                                            |
+| `analyticsService`    | `getOverview`, `getWorkerAnalytics`                                                                        |
+
+Every service method returns a typed Promise. Errors bubble up as `Error` instances with the backend's `error` message attached — pages catch and render them.
+
+---
+
+## 8. Feature Map by Role
+
+### 8.1 Admin (`/dashboard/admin`)
+
+| Page             | What it does                                                                                          |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| Overview         | Revenue (total / day / week / month), active clients, workers, tokens sold, stock alerts, referrals, profit estimate |
+| Users            | List/add admins, managers, workers + clients. Role tabs adapt fields                                  |
+| Clients          | Full CRUD + view modal with purchase history (today / week / month / all)                            |
+| Products         | Add / edit / delete with emoji image picker and category dropdown                                     |
+| Tables           | Read-only view of worker-table assignments                                                            |
+| Transactions     | Every token sale across all workers (with client + worker names resolved)                            |
+| Attendance       | All worker attendance entries                                                                         |
+| Bonuses          | History + total/count/average + "Assign new bonus" modal                                              |
+| Complaints       | Filed complaints + inline status dropdown (open / in-progress / resolved)                            |
+
+### 8.2 Manager (`/dashboard/manager`)
+
+| Page             | What it does                                                                                          |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| Overview         | Active workers, average attendance, total sales, tables assigned                                      |
+| Workers          | Performance: computed attendance %, tokens sold, bonus paid, rating                                  |
+| Daily Progress   | Form: worker / table / tokens given / tokens sold → auto balance (negative = red)                    |
+| Tables           | Assign workers to tables + release                                                                    |
+| Attendance       | All attendance entries                                                                                |
+| Inventory        | Stock list with low/out-of-stock banner                                                              |
+| Sales            | Token sales handled by the team                                                                       |
+| Bonuses          | Auto-recommendation table + history of bonuses paid                                                  |
+
+### 8.3 Worker (`/dashboard/worker`)
+
+| Page             | What it does                                                                                          |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| Overview         | Personal: clients served, tokens sold, sales total, attendance %, recent sales                       |
+| Clients          | Search clients by name / mobile / NID                                                                 |
+| New Client       | Register a walk-in customer (mobile + NID validation, optional referral)                             |
+| Sell Token       | Pick a client → enter tokens → optional cart of menu items → finalize (creates sale + purchases)     |
+| Sales            | Worker's own sales history                                                                            |
+| My Progress      | Personal stats + daily token-balance history                                                          |
+| Attendance       | Single-click "Mark me present" (auto late after 10 am)                                               |
+| Complaints       | File a complaint, view all (with submitter resolved by id)                                           |
+
+---
+
+## 9. Data Model
+
+All types live in [lib/types.ts](./lib/types.ts) and mirror the MongoDB schemas exposed by the backend:
+
+- `User` — admin / manager / worker
 - `Client`
-- `Product` (with `costPrice`, `sellingPrice`, `image`, `addedOn`, `updatedOn`)
-- `TokenSale`
-- `ClientPurchase` (items a client bought with tokens)
-- `AttendanceEntry`
-- `Complaint`
+- `Product` — `costPrice`, `sellingPrice`, `stock`, derived `status`
+- `TokenSale` — `clientId` + `workerId` (names resolved client-side)
+- `ClientPurchase` — items a client bought with tokens
+- `AttendanceEntry` — `workerId`, `date`, `status: present | absent | late`
+- `Complaint` — `byId`, status `open | in-progress | resolved`
 - `Bonus`
-- `TableAssignment`
-- `DailyProgress`
+- `TableAssignment` — `workerId`, status `active | free`
+- `DailyProgress` — `workerId`, `tokenGiven`, `tokenSold`, computed `balance`
+- `AnalyticsOverview`, `WorkerAnalytics`
+
+IDs are MongoDB ObjectIds returned as strings under the `id` field (plus `_id` for compatibility).
 
 ---
 
-## 9. Replacing Mock Data with the Real Backend
+## 10. UI / UX
 
-Connecting the API only requires changes in two places. See `backend.md` §9 for the full step-by-step.
-
-1. **`context/AuthContext.tsx`** — replace `loginAdmin`, `loginStaff`, `register` with `fetch` calls to:
-   - `POST /api/auth/login/admin`
-   - `POST /api/auth/login/staff`
-   - `POST /api/auth/register`
-   Store the returned JWT alongside the user under `localStorage` key `restaurant-token`.
-2. **Page components** — replace the static imports from `lib/mockData.ts` with `useEffect` + `fetch` (or SWR / TanStack Query). The component shapes already match the backend schemas, so the JSX needs no changes.
-
-Set `NEXT_PUBLIC_API_URL` in `frontend/.env.local` (e.g. `http://localhost:4000`).
-
----
-
-## 10. Authentication Details
-
-- **Admin** logs in with `email + password`.
-- **Manager / Worker** log in with `mobile + password (or PIN)`.
-- **Client** never logs in — they are records, not accounts.
-- Frontend stores the signed-in user under `localStorage` key `restaurant-auth-user` and the theme under `restaurant-theme`. When the backend lands it will additionally store the JWT under `restaurant-token`.
-- Blocked accounts cannot log in (demo user `01810000003` is intentionally seeded as `blocked` to demonstrate this).
+- White / slate-950 surfaces, light & dark theme
+- Theme toggle on every screen, choice persisted in `localStorage`
+- Fully responsive (360 px → 1440 px); sidebar collapses behind a hamburger on `< lg`
+- Reusable primitives in `globals.css`: `.card`, `.input`, `.btn-primary`, `.btn-ghost`, `.badge`
+- Reusable components: `DataTable` + `StatusBadge`, `Modal`, `StatCard`, `Sidebar`, `Header`, `DashboardShell`, `ThemeToggle`
 
 ---
 
 ## 11. Roadmap
 
-The frontend is feature-complete relative to the original spec. Remaining work:
+The frontend is feature-complete against the live backend. Potential next steps:
 
-1. Build the MongoDB backend per `backend.md`.
-2. Wire frontend to the API (replace mock data + auth handlers).
-3. Add real product image uploads (currently emoji).
-4. Add charts to admin overview (recharts is a good fit) once revenue data is real.
-5. Optional: Socket.IO for live tables / inventory updates.
-6. Optional: PWA + offline cache for workers in low-connectivity areas.
+1. **Real authorization** — issue JWT on login, send as `Authorization: Bearer …`, verify in Express middleware, hash passwords with bcrypt.
+2. **Charts** on the admin overview (recharts is a good fit).
+3. **Product image uploads** (currently emoji).
+4. **Sockets / live updates** for tables and inventory.
+5. **PWA + offline cache** for workers in low-connectivity areas.
+6. **Multi-branch** support via a `branchId` field on every collection.
 
 ---
 
-## 12. License & Credits
+## 12. License
 
-Internal project — no public license. Built as a complete operational dashboard for a single restaurant; the architecture also scales to multi-branch with the addition of a `branchId` field to every collection (described as a future option in `backend.md`).
+Internal project — no public license.
