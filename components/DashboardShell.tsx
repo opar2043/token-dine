@@ -23,12 +23,14 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
       router.replace("/login");
       return;
     }
-    if (user.role !== role) {
-      router.replace(`/dashboard/${user.role}`);
+    const userRole = user.role.toLowerCase();
+    const targetRole = role.toLowerCase();
+    if (userRole !== targetRole) {
+      router.replace(`/dashboard/${userRole}`);
     }
   }, [user, loading, role, router]);
 
-  if (loading || !user || user.role !== role) {
+  if (loading || !user || user.role.toLowerCase() !== role.toLowerCase()) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-sm text-slate-500">Loading…</p>

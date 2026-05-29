@@ -40,7 +40,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) setUser(JSON.parse(raw));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.role) parsed.role = parsed.role.toLowerCase();
+        setUser(parsed);
+      }
     } catch {
       // ignore corrupted storage
     }
@@ -48,6 +52,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const persist = useCallback((next: User | null) => {
+    if (next && next.role) {
+      next.role = next.role.toLowerCase() as Role;
+    }
     setUser(next);
     if (next) {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));

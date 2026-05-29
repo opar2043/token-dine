@@ -18,7 +18,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace(`/dashboard/${user.role}`);
+      router.replace(`/dashboard/${user.role.toLowerCase()}`);
     }
   }, [user, loading, router]);
 
@@ -34,7 +34,7 @@ export default function LoginPage() {
         mode === "admin"
           ? await loginAdmin(identifier.trim(), password)
           : await loginStaff(identifier.trim(), password);
-      router.replace(`/dashboard/${result.role}`);
+      router.replace(`/dashboard/${result.role.toLowerCase()}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed.");
     } finally {
@@ -122,20 +122,15 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <p className="mt-5 text-center text-sm text-slate-500 dark:text-slate-400">
-              New here?{" "}
-              <Link href="/register" className="font-medium text-slate-900 underline dark:text-white">
-                Create an account
-              </Link>
-            </p>
+
           </div>
 
           <div className="mt-4 rounded-2xl border border-dashed border-slate-200 p-4 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
             <p className="font-semibold text-slate-700 dark:text-slate-300">Demo credentials</p>
             <ul className="mt-2 space-y-1">
-              <li>Admin — admin@restaurant.com / any password</li>
-              <li>Manager — 01710000001 / any password</li>
-              <li>Worker — 01810000001 / any password</li>
+              <li>Admin — admin@restaurant.com / 12345</li>
+              <li>Manager — 01710000001 / 12345</li>
+              <li>Worker — 01810000001 / 12345</li>
             </ul>
           </div>
         </div>
