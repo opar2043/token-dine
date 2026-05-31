@@ -45,7 +45,7 @@ export default function ManagerAttendancePage() {
       render: (a) => workerMap.get(a.workerId)?.name ?? a.worker ?? formatId(a.workerId),
     },
     { key: "date", header: "Date", render: (a) => formatDate(a.date) },
-    { key: "status", header: "Status", render: (a) => <StatusBadge status={a.status} /> },
+    { key: "status", header: "Status", render: (a) => a.status === "present" ? <StatusBadge status={a.status} /> : null },
   ];
 
   return (

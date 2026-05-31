@@ -12,7 +12,7 @@ import {
 import { buildLookup, formatDate, formatId } from "@/lib/format";
 import type { AttendanceEntry, Bonus, TokenSale, User } from "@/lib/types";
 
-const bonusColumns = (workerMap: Map<string, User>): Column<Bonus>[] => [
+const bonusColumns = (workerMap: Map<string, User>, handleDelete: (id: string) => void): Column<Bonus>[] => [
   { key: "id", header: "ID", render: (b) => formatId(b.id) },
   {
     key: "worker",
@@ -27,6 +27,19 @@ const bonusColumns = (workerMap: Map<string, User>): Column<Bonus>[] => [
   },
   { key: "date", header: "Date", render: (b) => formatDate(b.date) },
   { key: "reason", header: "Reason" },
+  {
+    key: "actions",
+    header: "Actions",
+    align: "right",
+    render: (b) => (
+      <button
+        onClick={() => handleDelete(b.id)}
+        className="px-2 py-1 text-xs rounded border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/50 dark:text-rose-400 dark:hover:bg-rose-950/50"
+      >
+        Delete
+      </button>
+    )
+  },
 ];
 
 interface WorkerStat extends User {
@@ -67,6 +80,16 @@ export default function ManagerBonusesPage() {
       cancelled = true;
     };
   }, []);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this bonus?")) return;
+    try {
+      await bonusesService.deleteBonuses(id);
+      setBonuses((prev) => prev.filter((b) => b.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete bonus.");
+    }
+  };
 
   const workerMap = useMemo(() => buildLookup(workers), [workers]);
 
@@ -152,7 +175,7 @@ export default function ManagerBonusesPage() {
           Recent bonuses paid
         </h2>
         <DataTable<Bonus>
-          columns={bonusColumns(workerMap)}
+          columns={bonusColumns(workerMap, handleDelete)}
           rows={bonuses}
           emptyMessage={loading ? "Loading bonuses…" : "No bonuses yet."}
         />

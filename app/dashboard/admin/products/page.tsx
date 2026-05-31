@@ -63,7 +63,30 @@ export default function AdminProductsPage() {
     { key: "addedOn", header: "Added", render: (p) => formatDate(p.addedOn) },
     { key: "updatedOn", header: "Updated", render: (p) => formatDate(p.updatedOn) },
     { key: "status", header: "Status", render: (p) => <StatusBadge status={p.status} /> },
+    {
+      key: "actions",
+      header: "Actions",
+      align: "right",
+      render: (p) => (
+        <button
+          onClick={() => handleDelete(p.id)}
+          className="px-2 py-1 text-xs rounded border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/50 dark:text-rose-400 dark:hover:bg-rose-950/50"
+        >
+          Delete
+        </button>
+      ),
+    },
   ];
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this product?")) return;
+    try {
+      await productsService.deleteProducts(id);
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete product.");
+    }
+  };
 
   const handleCreate = (p: Product) => {
     setProducts((prev) => [p, ...prev]);

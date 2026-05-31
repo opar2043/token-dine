@@ -55,6 +55,28 @@ export default function ManagerWorkersPage() {
     return m;
   }, [attendance]);
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this worker?")) return;
+    try {
+      await usersService.deleteUsers(id);
+      setWorkers((prev) => prev.filter((w) => w.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete worker.");
+    }
+  };
+
+  const handleToggleStatus = async (worker: User) => {
+    const newStatus = worker.status === "active" ? "blocked" : "active";
+    try {
+      await usersService.updateUserStatus(worker.id, newStatus);
+      setWorkers((prev) =>
+        prev.map((w) => (w.id === worker.id ? { ...w, status: newStatus } : w))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update status.");
+    }
+  };
+
   const columns: Column<User>[] = [
     { key: "id", header: "ID", render: (w) => formatId(w.id) },
     { key: "name", header: "Name" },
@@ -88,6 +110,27 @@ export default function ManagerWorkersPage() {
       render: (w) => (w.rating ?? 0).toFixed(1),
     },
     { key: "status", header: "Status", render: (w) => <StatusBadge status={w.status} /> },
+    {
+      key: "actions",
+      header: "Actions",
+      align: "right",
+      render: (w) => (
+        <div className="flex justify-end gap-2">
+          <button 
+            onClick={() => handleToggleStatus(w)}
+            className="px-2 py-1 text-xs rounded border border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            {w.status === "active" ? "Block" : "Activate"}
+          </button>
+          <button
+            onClick={() => handleDelete(w.id)}
+            className="px-2 py-1 text-xs rounded border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/50 dark:text-rose-400 dark:hover:bg-rose-950/50"
+          >
+            Delete
+          </button>
+        </div>
+      )
+    }
   ];
 
   return (

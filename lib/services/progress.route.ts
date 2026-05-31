@@ -24,4 +24,8 @@ export const progressService = {
     const { data } = await api.post<DailyProgress>("/progress", payload);
     return data;
   },
+
+  deleteProgress: async (id: string): Promise<void> => {
+    await api.delete(`/progress/${id}`);
+  },
 };

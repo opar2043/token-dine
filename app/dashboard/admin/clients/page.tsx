@@ -124,6 +124,18 @@ export default function AdminClientsPage() {
     }
   };
 
+  const handleRemovePurchase = async (clientId: string, purchaseId: string) => {
+    if (!confirm("Are you sure you want to remove this purchase?")) return;
+    try {
+      await clientsService.deleteClientPurchase(clientId, purchaseId);
+      setPurchases((prev) => prev.filter((p) => p.id !== purchaseId));
+      const refreshed = await clientsService.getClient(clientId);
+      setClients((prev) => prev.map((c) => (c.id === clientId ? refreshed : c)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove purchase.");
+    }
+  };
+
   const columns: Column<Client>[] = [
     { key: "id", header: "Client ID", render: (c) => formatId(c.id) },
     { key: "name", header: "Name" },
@@ -217,9 +229,11 @@ export default function AdminClientsPage() {
             products={products}
             purchases={purchases}
             onSave={handleSave}
+            onDeleteClient={() => open(selected.id, "delete")}
             onAddPurchase={(productId, qty, tokensUsed) =>
               handleAddPurchase(selected.id, productId, qty, tokensUsed)
             }
+            onRemovePurchase={(purchaseId) => handleRemovePurchase(selected.id, purchaseId)}
             onCancel={close}
           />
         ) : null}
@@ -429,14 +443,18 @@ function EditContent({
   products,
   purchases,
   onSave,
+  onDeleteClient,
   onAddPurchase,
+  onRemovePurchase,
   onCancel,
 }: {
   client: Client;
   products: Product[];
   purchases: ClientPurchase[];
   onSave: (next: Client) => void;
+  onDeleteClient: () => void;
   onAddPurchase: (productId: string, qty: number, tokensUsed: number) => void;
+  onRemovePurchase: (purchaseId: string) => void;
   onCancel: () => void;
 }) {
   const [form, setForm] = useState<Client>(client);
@@ -598,9 +616,32 @@ function EditContent({
             <PlusIcon /> Add
           </button>
         </div>
+        
+        {purchases.length > 0 && (
+          <div className="mt-4 space-y-2">
+            {purchases.map((p) => (
+              <div key={p.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-2 dark:border-slate-800">
+                <div>
+                  <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{p.productName}</span>
+                  <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">Qty: {p.qty}, Tokens: {p.tokensUsed}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onRemovePurchase(p.id)}
+                  className="px-2 py-1 text-xs rounded border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/50 dark:text-rose-400 dark:hover:bg-rose-950/50"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center gap-2 mt-4">
+        <button type="button" className="inline-flex mr-auto items-center justify-center rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-rose-700" onClick={onDeleteClient}>
+          Delete client
+        </button>
         <button type="button" className="btn-ghost" onClick={onCancel}>
           Cancel
         </button>

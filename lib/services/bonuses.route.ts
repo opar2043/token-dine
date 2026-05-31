@@ -21,4 +21,8 @@ export const bonusesService = {
     const { data } = await api.post<Bonus>("/bonuses", payload);
     return data;
   },
+
+  deleteBonuses: async (id: string): Promise<void> => {
+    await api.delete(`/bonuses/${id}`);
+  },
 };

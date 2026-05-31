@@ -75,6 +75,16 @@ export default function ManagerDailyProgressPage() {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this progress entry?")) return;
+    try {
+      await progressService.deleteProgress(id);
+      setRows((prev) => prev.filter((p) => p.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete progress.");
+    }
+  };
+
   const columns: Column<DailyProgress>[] = [
     { key: "date", header: "Date", render: (row) => formatDate(row.date) },
     {
@@ -102,6 +112,19 @@ export default function ManagerDailyProgressPage() {
       ),
     },
     { key: "notes", header: "Notes", render: (row) => row.notes ?? "—" },
+    {
+      key: "actions",
+      header: "Actions",
+      align: "right",
+      render: (row) => (
+        <button
+          onClick={() => handleDelete(row.id)}
+          className="px-2 py-1 text-xs rounded border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/50 dark:text-rose-400 dark:hover:bg-rose-950/50"
+        >
+          Delete
+        </button>
+      ),
+    },
   ];
 
   return (

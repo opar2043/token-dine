@@ -63,6 +63,29 @@ export default function AdminUsersPage() {
     setOpen(false);
   };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this user?")) return;
+    try {
+      await usersService.deleteUsers(id);
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+      setFlash("User deleted successfully.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete user.");
+    }
+  };
+
+  const handleToggleStatus = async (user: User) => {
+    const newStatus = user.status === "active" ? "blocked" : "active";
+    try {
+      await usersService.updateUserStatus(user.id, newStatus);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === user.id ? { ...u, status: newStatus } : u))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update status.");
+    }
+  };
+
   return (
     <DashboardShell role="admin">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
@@ -93,7 +116,30 @@ export default function AdminUsersPage() {
       ) : null}
 
       <DataTable<User>
-        columns={userColumns}
+        columns={[
+          ...userColumns,
+          {
+            key: "actions",
+            header: "Actions",
+            align: "right",
+            render: (u) => (
+              <div className="flex justify-end gap-2">
+                <button 
+                  onClick={() => handleToggleStatus(u)}
+                  className="px-2 py-1 text-xs rounded border border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
+                  {u.status === "active" ? "Block" : "Activate"}
+                </button>
+                <button
+                  onClick={() => handleDelete(u.id)}
+                  className="px-2 py-1 text-xs rounded border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/50 dark:text-rose-400 dark:hover:bg-rose-950/50"
+                >
+                  Delete
+                </button>
+              </div>
+            )
+          }
+        ]}
         rows={users}
         emptyMessage={loading ? "Loading users…" : "No users found."}
       />

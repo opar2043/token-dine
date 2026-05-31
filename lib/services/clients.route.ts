@@ -75,4 +75,8 @@ export const clientsService = {
     const { data } = await api.post<ClientPurchase>(`/clients/${id}/purchases`, payload);
     return data;
   },
+
+  deleteClientPurchase: async (clientId: string, purchaseId: string): Promise<void> => {
+    await api.delete(`/clients/${clientId}/purchases/${purchaseId}`);
+  },
 };

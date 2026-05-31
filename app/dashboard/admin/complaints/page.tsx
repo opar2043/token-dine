@@ -46,6 +46,16 @@ export default function AdminComplaintsPage() {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this complaint?")) return;
+    try {
+      await complaintsService.deleteComplaints(id);
+      setItems((prev) => prev.filter((c) => c.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete complaint.");
+    }
+  };
+
   const columns: Column<Complaint>[] = [
     { key: "id", header: "ID", render: (c) => formatId(c.id) },
     {
@@ -61,8 +71,9 @@ export default function AdminComplaintsPage() {
       header: "Update",
       align: "right",
       render: (c) => (
+        <div className="flex items-center justify-end">
         <select
-          className="input py-1.5 text-xs"
+          className="input py-1.5 text-xs inline-block w-auto"
           value={c.status}
           onChange={(e) => handleStatus(c.id, e.target.value as ComplaintStatus)}
         >
@@ -70,6 +81,13 @@ export default function AdminComplaintsPage() {
           <option value="in-progress">In progress</option>
           <option value="resolved">Resolved</option>
         </select>
+        <button
+          onClick={() => handleDelete(c.id)}
+          className="ml-2 px-2 py-1 text-xs rounded border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/50 dark:text-rose-400 dark:hover:bg-rose-950/50"
+        >
+          Delete
+        </button>
+        </div>
       ),
     },
   ];

@@ -30,4 +30,8 @@ export const complaintsService = {
     const { data } = await api.patch<Complaint>(`/complaints/${id}/status`, { status });
     return data;
   },
+
+  deleteComplaints: async (id: string): Promise<void> => {
+    await api.delete(`/complaints/${id}`);
+  },
 };
