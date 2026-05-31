@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, StatusBadge, type Column } from "@/components/DataTable";
+import { PlusIcon, TrashIcon, CheckIcon, BanIcon } from "@/components/icons";
 import { attendanceService, salesService, usersService } from "@/lib/services";
 import { formatId } from "@/lib/format";
 import type { AttendanceEntry, TokenSale, User } from "@/lib/types";
@@ -115,18 +116,20 @@ export default function ManagerWorkersPage() {
       header: "Actions",
       align: "right",
       render: (w) => (
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
           <button 
             onClick={() => handleToggleStatus(w)}
-            className="px-2 py-1 text-xs rounded border border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+            title={w.status === "active" ? "Block" : "Activate"}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition"
           >
-            {w.status === "active" ? "Block" : "Activate"}
+            {w.status === "active" ? <BanIcon className="h-4 w-4" /> : <CheckIcon className="h-4 w-4" />}
           </button>
           <button
             onClick={() => handleDelete(w.id)}
-            className="px-2 py-1 text-xs rounded border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/50 dark:text-rose-400 dark:hover:bg-rose-950/50"
+            title="Delete"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:border-rose-900/50 dark:text-rose-400 dark:hover:bg-rose-950/50 transition"
           >
-            Delete
+            <TrashIcon className="h-4 w-4" />
           </button>
         </div>
       )

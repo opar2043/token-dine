@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, StatusBadge, type Column } from "@/components/DataTable";
+import { TrashIcon } from "@/components/icons";
 import { complaintsService, usersService } from "@/lib/services";
 import { buildLookup, formatDate, formatId } from "@/lib/format";
 import type { Complaint, ComplaintStatus, User } from "@/lib/types";
@@ -83,9 +84,10 @@ export default function AdminComplaintsPage() {
         </select>
         <button
           onClick={() => handleDelete(c.id)}
-          className="ml-2 px-2 py-1 text-xs rounded border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/50 dark:text-rose-400 dark:hover:bg-rose-950/50"
+          title="Delete"
+          className="ml-2 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:border-rose-900/50 dark:text-rose-400 dark:hover:bg-rose-950/50 transition align-middle"
         >
-          Delete
+          <TrashIcon className="h-4 w-4" />
         </button>
         </div>
       ),

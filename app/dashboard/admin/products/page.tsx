@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, StatusBadge, type Column } from "@/components/DataTable";
 import { Modal } from "@/components/Modal";
-import { PlusIcon } from "@/components/icons";
+import { PlusIcon, EditIcon, TrashIcon } from "@/components/icons";
 import { productsService } from "@/lib/services";
 import { formatDate, formatId } from "@/lib/format";
 import type { Product } from "@/lib/types";
@@ -17,7 +17,8 @@ function stockStatus(stock: number): Product["status"] {
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"add" | "edit" | null>(null);
+  const [selected, setSelected] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,12 +69,25 @@ export default function AdminProductsPage() {
       header: "Actions",
       align: "right",
       render: (p) => (
-        <button
-          onClick={() => handleDelete(p.id)}
-          className="px-2 py-1 text-xs rounded border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/50 dark:text-rose-400 dark:hover:bg-rose-950/50"
-        >
-          Delete
-        </button>
+        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+          <button
+            onClick={() => {
+              setSelected(p);
+              setMode("edit");
+            }}
+            title="Edit"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition"
+          >
+            <EditIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => handleDelete(p.id)}
+            title="Delete"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:border-rose-900/50 dark:text-rose-400 dark:hover:bg-rose-950/50 transition"
+          >
+            <TrashIcon className="h-4 w-4" />
+          </button>
+        </div>
       ),
     },
   ];
@@ -90,7 +104,12 @@ export default function AdminProductsPage() {
 
   const handleCreate = (p: Product) => {
     setProducts((prev) => [p, ...prev]);
-    setOpen(false);
+    setMode(null);
+  };
+
+  const handleUpdate = (p: Product) => {
+    setProducts((prev) => prev.map((item) => (item.id === p.id ? p : item)));
+    setMode(null);
   };
 
   return (
@@ -102,7 +121,10 @@ export default function AdminProductsPage() {
             Cost, selling price, margin, and stock health.
           </p>
         </div>
-        <button type="button" className="btn-primary gap-1.5" onClick={() => setOpen(true)}>
+        <button type="button" className="btn-primary gap-1.5" onClick={() => {
+          setSelected(null);
+          setMode("add");
+        }}>
           <PlusIcon /> Add product
         </button>
       </div>
@@ -120,15 +142,17 @@ export default function AdminProductsPage() {
       />
 
       <Modal
-        open={open}
-        onClose={() => setOpen(false)}
+        open={mode !== null}
+        onClose={() => setMode(null)}
         size="md"
-        title="Add product"
-        description="Create a new menu item with pricing and starting stock."
+        title={mode === "edit" ? "Edit product" : "Add product"}
+        description={mode === "edit" ? "Update product details." : "Create a new menu item with pricing and starting stock."}
       >
         <ProductForm
-          onCancel={() => setOpen(false)}
+          initialData={mode === "edit" ? selected : null}
+          onCancel={() => setMode(null)}
           onCreate={handleCreate}
+          onUpdate={handleUpdate}
         />
       </Modal>
     </DashboardShell>
@@ -139,18 +163,22 @@ const categories = ["Main Course", "Appetizer", "Beverage", "Dessert", "Snack", 
 const emojiChoices = ["🍛", "🥘", "🥤", "🍢", "🍨", "🍕", "🍔", "🥗", "🍰", "🍜", "🍤", "🍽️"];
 
 function ProductForm({
+  initialData,
   onCancel,
   onCreate,
+  onUpdate,
 }: {
+  initialData?: Product | null;
   onCancel: () => void;
   onCreate: (p: Product) => void;
+  onUpdate: (p: Product) => void;
 }) {
-  const [name, setName] = useState("");
-  const [image, setImage] = useState(emojiChoices[0]);
-  const [category, setCategory] = useState(categories[0]);
-  const [costPrice, setCostPrice] = useState(0);
-  const [sellingPrice, setSellingPrice] = useState(0);
-  const [stock, setStock] = useState(0);
+  const [name, setName] = useState(initialData?.name ?? "");
+  const [image, setImage] = useState(initialData?.image ?? emojiChoices[0]);
+  const [category, setCategory] = useState(initialData?.category ?? categories[0]);
+  const [costPrice, setCostPrice] = useState(initialData?.costPrice ?? 0);
+  const [sellingPrice, setSellingPrice] = useState(initialData?.sellingPrice ?? 0);
+  const [stock, setStock] = useState(initialData?.stock ?? 0);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -177,17 +205,29 @@ function ProductForm({
 
     setSubmitting(true);
     try {
-      const created = await productsService.createProducts({
-        name: name.trim(),
-        image,
-        category,
-        costPrice,
-        sellingPrice,
-        stock,
-      });
-      onCreate(created);
+      if (initialData) {
+        const updated = await productsService.updateProducts(initialData.id, {
+          name: name.trim(),
+          image,
+          category,
+          costPrice,
+          sellingPrice,
+          stock,
+        });
+        onUpdate(updated);
+      } else {
+        const created = await productsService.createProducts({
+          name: name.trim(),
+          image,
+          category,
+          costPrice,
+          sellingPrice,
+          stock,
+        });
+        onCreate(created);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create product.");
+      setError(err instanceof Error ? err.message : "Failed to save product.");
     } finally {
       setSubmitting(false);
     }
@@ -283,7 +323,7 @@ function ProductForm({
           Cancel
         </button>
         <button type="submit" className="btn-primary" disabled={submitting}>
-          {submitting ? "Adding…" : "Add product"}
+          {submitting ? "Saving…" : initialData ? "Save changes" : "Add product"}
         </button>
       </div>
     </form>

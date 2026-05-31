@@ -5,6 +5,7 @@ import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, type Column } from "@/components/DataTable";
 import { StatCard } from "@/components/StatCard";
 import { Modal } from "@/components/Modal";
+import { TrashIcon } from "@/components/icons";
 import { bonusesService, usersService } from "@/lib/services";
 import { buildLookup, formatDate, formatId } from "@/lib/format";
 import type { Bonus, User } from "@/lib/types";
@@ -63,12 +64,15 @@ export default function AdminBonusesPage() {
       header: "Actions",
       align: "right",
       render: (b) => (
-        <button
-          onClick={() => handleDelete(b.id)}
-          className="px-2 py-1 text-xs rounded border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/50 dark:text-rose-400 dark:hover:bg-rose-950/50"
-        >
-          Delete
-        </button>
+        <div className="flex items-center justify-end whitespace-nowrap">
+          <button
+            onClick={() => handleDelete(b.id)}
+            title="Delete"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:border-rose-900/50 dark:text-rose-400 dark:hover:bg-rose-950/50 transition"
+          >
+            <TrashIcon className="h-4 w-4" />
+          </button>
+        </div>
       )
     },
   ];
