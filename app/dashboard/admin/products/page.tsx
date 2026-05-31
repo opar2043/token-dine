@@ -281,10 +281,10 @@ function ProductForm({
           />
         </Field>
         <Field label={`Margin: ৳ ${margin}`}>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="rounded-md text-xs border border-slate-200 bg-slate-50 px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
             Status preview:{" "}
             <strong>
-              {stockStatus(stock).replace("-", " ")}
+              {stockStatus(stock).replace("-", " ")} 
             </strong>
           </div>
         </Field>

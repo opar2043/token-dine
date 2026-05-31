@@ -22,7 +22,7 @@ export function DataTable<T extends { id?: string | number }>({
     align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
+    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-900">
@@ -90,5 +90,5 @@ export function StatusBadge({ status }: { status: string }) {
     resolved: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
   };
   const cls = palette[status] ?? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
-  return <span className={`badge ${cls}`}>{status}</span>;
+  return <span className={`badge text-xs px-2 py-0.5 ${cls}`}>{status}</span>;
 }
