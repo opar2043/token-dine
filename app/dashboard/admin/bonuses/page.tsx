@@ -5,9 +5,11 @@ import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, type Column } from "@/components/DataTable";
 import { StatCard } from "@/components/StatCard";
 import { Modal } from "@/components/Modal";
+import { DateRangeFilter } from "@/components/DateRangeFilter";
 import { TrashIcon } from "@/components/icons";
 import { bonusesService, usersService } from "@/lib/services";
 import { buildLookup, formatDate, formatId } from "@/lib/format";
+import { ALL_RANGE, inRange, type DateRange } from "@/lib/dateRange";
 import type { Bonus, User } from "@/lib/types";
 
 export default function AdminBonusesPage() {
@@ -16,6 +18,7 @@ export default function AdminBonusesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [range, setRange] = useState<DateRange>(ALL_RANGE);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,8 +44,13 @@ export default function AdminBonusesPage() {
 
   const workerMap = useMemo(() => buildLookup(workers), [workers]);
 
-  const total = bonuses.reduce((sum, b) => sum + b.amount, 0);
-  const average = bonuses.length ? Math.round(total / bonuses.length) : 0;
+  const filteredBonuses = useMemo(
+    () => bonuses.filter((b) => inRange(b.date, range)),
+    [bonuses, range],
+  );
+
+  const total = filteredBonuses.reduce((sum, b) => sum + b.amount, 0);
+  const average = filteredBonuses.length ? Math.round(total / filteredBonuses.length) : 0;
 
   const columns: Column<Bonus>[] = [
     { key: "id", header: "Bonus ID", render: (b) => formatId(b.id) },
@@ -101,9 +109,12 @@ export default function AdminBonusesPage() {
             Performance-based bonus history.
           </p>
         </div>
-        <button className="btn-primary" type="button" onClick={() => setOpen(true)}>
-          Assign new bonus
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangeFilter value={range} onChange={setRange} />
+          <button className="btn-primary" type="button" onClick={() => setOpen(true)}>
+            Assign new bonus
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -120,8 +131,8 @@ export default function AdminBonusesPage() {
 
       <DataTable<Bonus>
         columns={columns}
-        rows={bonuses}
-        emptyMessage={loading ? "Loading bonuses…" : "No bonuses yet."}
+        rows={filteredBonuses}
+        emptyMessage={loading ? "Loading bonuses…" : "No bonuses in this range."}
       />
 
       <Modal

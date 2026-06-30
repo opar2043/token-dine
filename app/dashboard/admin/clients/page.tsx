@@ -209,6 +209,7 @@ export default function AdminClientsPage() {
         {selected ? (
           <ViewContent
             client={selected}
+            allClients={clients}
             purchases={purchases}
             range={range}
             onRangeChange={setRange}
@@ -326,11 +327,13 @@ function withinRange(dateStr: string, range: Range): boolean {
 
 function ViewContent({
   client,
+  allClients,
   purchases,
   range,
   onRangeChange,
 }: {
   client: Client;
+  allClients: Client[];
   purchases: ClientPurchase[];
   range: Range;
   onRangeChange: (r: Range) => void;
@@ -340,9 +343,18 @@ function ViewContent({
     [purchases, range],
   );
 
+  // People this client referred: stored array on the client + anyone whose
+  // referral mobile matches this client's mobile (covers older records).
+  const referredMobiles = useMemo(() => {
+    const set = new Set<string>(client.referrals ?? []);
+    for (const c of allClients) {
+      if (c.referral && c.referral === client.mobile) set.add(c.mobile);
+    }
+    return Array.from(set);
+  }, [client.referrals, client.mobile, allClients]);
+
   const totalItems = filtered.reduce((sum, p) => sum + p.qty, 0);
   const totalTokens = filtered.reduce((sum, p) => sum + p.tokensUsed, 0);
-  const totalAmount = filtered.reduce((sum, p) => sum + p.amount, 0);
 
   const ranges: { value: Range; label: string }[] = [
     { value: "today", label: "Today" },
@@ -356,7 +368,6 @@ function ViewContent({
     { key: "productName", header: "Item" },
     { key: "qty", header: "Qty", align: "right" },
     { key: "tokensUsed", header: "Tokens", align: "right" },
-    { key: "amount", header: "Amount (BDT)", align: "right", render: (p) => p.amount.toLocaleString() },
   ];
 
   return (
@@ -365,9 +376,36 @@ function ViewContent({
         <ProfileRow label="Email" value={client.email ?? "—"} />
         <ProfileRow label="Address" value={client.address ?? "—"} />
         <ProfileRow label="Gender" value={client.gender ?? "—"} />
-        <ProfileRow label="Referral" value={client.referral ?? "—"} />
+        <ProfileRow label="Referred by" value={client.referral ?? "—"} />
         <ProfileRow label="Joined" value={formatDate(client.createdAt)} />
         <ProfileRow label="Rating" value={`${client.rating.toFixed(1)} / 5`} />
+      </section>
+
+      <section className="rounded-xl border border-slate-200 px-3 py-3 dark:border-slate-800">
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Referred people (mobile numbers)
+          </p>
+          <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+            {referredMobiles.length}
+          </span>
+        </div>
+        {referredMobiles.length === 0 ? (
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            This client hasn&apos;t referred anyone yet.
+          </p>
+        ) : (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {referredMobiles.map((m) => (
+              <span
+                key={m}
+                className="badge bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
+              >
+                {m}
+              </span>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -400,10 +438,9 @@ function ViewContent({
           </div>
         </div>
 
-        <div className="mb-3 grid grid-cols-3 gap-2 text-center text-xs">
+        <div className="mb-3 grid grid-cols-2 gap-2 text-center text-xs">
           <Mini label="Items" value={totalItems} />
           <Mini label="Tokens used" value={totalTokens} />
-          <Mini label="Spend (BDT)" value={totalAmount.toLocaleString()} />
         </div>
 
         <DataTable<ClientPurchase>

@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, type Column } from "@/components/DataTable";
 import { StatCard } from "@/components/StatCard";
+import { DateRangeFilter } from "@/components/DateRangeFilter";
 import { useAuth } from "@/context/AuthContext";
 import { attendanceService, clientsService, salesService } from "@/lib/services";
 import { buildLookup, formatDate, formatId } from "@/lib/format";
+import { ALL_RANGE, inRange, type DateRange } from "@/lib/dateRange";
 import type { AttendanceEntry, Client, TokenSale } from "@/lib/types";
 
 export default function WorkerDashboardPage() {
@@ -16,6 +18,7 @@ export default function WorkerDashboardPage() {
   const [attendance, setAttendance] = useState<AttendanceEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [range, setRange] = useState<DateRange>(ALL_RANGE);
 
   useEffect(() => {
     if (!user) return;
@@ -43,8 +46,11 @@ export default function WorkerDashboardPage() {
   }, [user]);
 
   const clientMap = useMemo(() => buildLookup(clients), [clients]);
-  const totalAmount = sales.reduce((sum, s) => sum + s.amount, 0);
-  const totalTokens = sales.reduce((sum, s) => sum + s.tokens, 0);
+  const filteredSales = useMemo(
+    () => sales.filter((s) => inRange(s.date, range)),
+    [sales, range],
+  );
+  const totalTokens = filteredSales.reduce((sum, s) => sum + s.tokens, 0);
 
   const attendanceRate = useMemo(() => {
     if (!attendance.length) return 0;
@@ -61,21 +67,18 @@ export default function WorkerDashboardPage() {
       render: (s) => clientMap.get(s.clientId)?.name ?? s.client ?? formatId(s.clientId),
     },
     { key: "tokens", header: "Tokens", align: "right" },
-    {
-      key: "amount",
-      header: "Amount (BDT)",
-      align: "right",
-      render: (s) => s.amount.toLocaleString(),
-    },
   ];
 
   return (
     <DashboardShell role="worker">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Your overview</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Track your sales, attendance, and assigned clients.
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Your overview</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Track your sales, attendance, and assigned clients.
+          </p>
+        </div>
+        <DateRangeFilter value={range} onChange={setRange} />
       </div>
 
       {error ? (
@@ -86,8 +89,8 @@ export default function WorkerDashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Clients Served" value={clients.length} />
-        <StatCard label="Tokens Sold" value={totalTokens} />
-        <StatCard label="Sales (BDT)" value={`৳ ${totalAmount.toLocaleString()}`} />
+        <StatCard label="Tokens Sold" value={totalTokens} hint="In range" />
+        <StatCard label="Transactions" value={filteredSales.length} hint="In range" />
         <StatCard label="Attendance" value={`${attendanceRate}%`} hint="All time" />
       </div>
 
@@ -95,8 +98,8 @@ export default function WorkerDashboardPage() {
         <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-white">Recent sales</h2>
         <DataTable<TokenSale>
           columns={columns}
-          rows={sales}
-          emptyMessage={loading ? "Loading sales…" : "No sales yet."}
+          rows={filteredSales}
+          emptyMessage={loading ? "Loading sales…" : "No sales in this range."}
         />
       </section>
     </DashboardShell>

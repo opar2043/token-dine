@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, StatusBadge, type Column } from "@/components/DataTable";
 import { Modal } from "@/components/Modal";
 import { PlusIcon, TrashIcon, CheckIcon, BanIcon } from "@/components/icons";
 import { clientsService, usersService } from "@/lib/services";
 import { formatDate, formatId } from "@/lib/format";
-import type { Client, User } from "@/lib/types";
+import type { Client, Role, User } from "@/lib/types";
 
 type CreateRole = "client" | "manager" | "worker";
+type RoleFilter = "all" | Role;
 
 const userColumns: Column<User>[] = [
   { key: "id", header: "ID", render: (u) => formatId(u.id) },
@@ -28,6 +29,7 @@ export default function AdminUsersPage() {
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +88,18 @@ export default function AdminUsersPage() {
     }
   };
 
+  const filteredUsers = useMemo(
+    () => (roleFilter === "all" ? users : users.filter((u) => u.role === roleFilter)),
+    [users, roleFilter],
+  );
+
+  const roleFilters: { value: RoleFilter; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "admin", label: "Admin" },
+    { value: "manager", label: "Manager" },
+    { value: "worker", label: "Worker" },
+  ];
+
   return (
     <DashboardShell role="admin">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
@@ -98,6 +112,28 @@ export default function AdminUsersPage() {
         <button type="button" className="btn-primary gap-1.5" onClick={() => setOpen(true)}>
           <PlusIcon /> Add user
         </button>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          Filter by role
+        </span>
+        <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-900">
+          {roleFilters.map((r) => (
+            <button
+              key={r.value}
+              type="button"
+              onClick={() => setRoleFilter(r.value)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                roleFilter === r.value
+                  ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white"
+                  : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error ? (
@@ -142,13 +178,13 @@ export default function AdminUsersPage() {
             )
           }
         ]}
-        rows={users}
+        rows={filteredUsers}
         emptyMessage={loading ? "Loading users…" : "No users found."}
       />
 
       <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-        Showing {users.length} system user(s). Clients ({clients.length}) live on the{" "}
-        <strong>Clients</strong> page.
+        Showing {filteredUsers.length} of {users.length} system user(s). Clients ({clients.length})
+        live on the <strong>Clients</strong> page.
       </p>
 
       <Modal

@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, StatusBadge, type Column } from "@/components/DataTable";
+import { DateRangeFilter } from "@/components/DateRangeFilter";
 import { attendanceService, usersService } from "@/lib/services";
 import { buildLookup, formatDate, formatId } from "@/lib/format";
+import { ALL_RANGE, inRange, type DateRange } from "@/lib/dateRange";
 import type { AttendanceEntry, User } from "@/lib/types";
 
 export default function AdminAttendancePage() {
@@ -12,6 +14,7 @@ export default function AdminAttendancePage() {
   const [workers, setWorkers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [range, setRange] = useState<DateRange>(ALL_RANGE);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,6 +40,11 @@ export default function AdminAttendancePage() {
 
   const workerMap = useMemo(() => buildLookup(workers), [workers]);
 
+  const filtered = useMemo(
+    () => items.filter((a) => inRange(a.date, range)),
+    [items, range],
+  );
+
   const columns: Column<AttendanceEntry>[] = [
     { key: "id", header: "Entry", render: (a) => formatId(a.id) },
     {
@@ -45,16 +53,19 @@ export default function AdminAttendancePage() {
       render: (a) => workerMap.get(a.workerId)?.name ?? a.worker ?? formatId(a.workerId),
     },
     { key: "date", header: "Date", render: (a) => formatDate(a.date) },
-    { key: "status", header: "Status", render: (a) => a.status === "present" ? <StatusBadge status={a.status} /> : null },
+    { key: "status", header: "Status", render: (a) => <StatusBadge status={a.status} /> },
   ];
 
   return (
     <DashboardShell role="admin">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Attendance</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          All worker attendance entries across the team.
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Attendance</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            All worker attendance entries across the team.
+          </p>
+        </div>
+        <DateRangeFilter value={range} onChange={setRange} />
       </div>
 
       {error ? (
@@ -65,8 +76,8 @@ export default function AdminAttendancePage() {
 
       <DataTable<AttendanceEntry>
         columns={columns}
-        rows={items}
-        emptyMessage={loading ? "Loading attendance…" : "No attendance records."}
+        rows={filtered}
+        emptyMessage={loading ? "Loading attendance…" : "No attendance records in this range."}
       />
     </DashboardShell>
   );

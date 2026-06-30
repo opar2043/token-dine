@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, StatusBadge, type Column } from "@/components/DataTable";
 import { StatCard } from "@/components/StatCard";
+import { DateRangeFilter } from "@/components/DateRangeFilter";
 import { analyticsService, usersService } from "@/lib/services";
 import { formatDate, formatId } from "@/lib/format";
+import { ALL_RANGE, inRange, type DateRange } from "@/lib/dateRange";
 import type { AnalyticsOverview, User } from "@/lib/types";
 
 const userColumns: Column<User>[] = [
@@ -22,6 +24,7 @@ export default function AdminDashboardPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<DateRange>(ALL_RANGE);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,19 +48,25 @@ export default function AdminDashboardPage() {
     };
   }, []);
 
-  const totalRevenue = overview?.revenue.total ?? 0;
-  const daily = overview?.revenue.day ?? 0;
-  const weekly = overview?.revenue.week ?? 0;
-  const monthly = overview?.revenue.month ?? 0;
+  // Token-only system: headline figures are tokens, not BDT.
+  const totalTokens = overview?.tokens?.total ?? 0;
+  const dailyTokens = overview?.tokens?.day ?? 0;
+  const weeklyTokens = overview?.tokens?.week ?? 0;
+  const monthlyTokens = overview?.tokens?.month ?? 0;
 
   const totalClients = overview?.activeClients ?? 0;
   const totalWorkers = users.filter((u) => u.role === "worker").length;
   const totalTokensSold = overview?.tokensSold ?? 0;
+  // Product margin stays in BDT (used for product profitability only).
   const profit = overview?.profitEstimate ?? 0;
   const referralCount = overview?.referralCount ?? 0;
   const lowStock = overview?.stockAlerts ?? 0;
-  // fallback: count products from overview if available, else 0
-  const totalProducts = (overview as any)?.totalProducts ?? 0;
+  const totalProducts = overview?.totalProducts ?? 0;
+
+  const filteredUsers = useMemo(
+    () => users.filter((u) => inRange(u.joinedOn ?? u.createdAt, range)),
+    [users, range],
+  );
 
   /* ── shared arrow SVG ── */
   const ArrowIcon = () => (
@@ -147,24 +156,24 @@ export default function AdminDashboardPage() {
           </span>
         </a>
 
-        {/* Revenue — emerald→cyan */}
+        {/* Product Flow — emerald→cyan (replaces Revenue) */}
         <a
-          href="/dashboard/admin/transactions"
+          href="/dashboard/admin/product-flow"
           className="group relative overflow-hidden rounded-2xl p-6 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
           style={{ background: "linear-gradient(135deg, #10b981 0%, #06b6d4 100%)" }}
         >
           <Blobs />
           <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 text-white shadow-inner">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
-              <path d="M12 7.5a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5Z" />
-              <path fillRule="evenodd" d="M1.5 4.875C1.5 3.839 2.34 3 3.375 3h17.25c1.035 0 1.875.84 1.875 1.875v9.75c0 1.036-.84 1.875-1.875 1.875H3.375A1.875 1.875 0 0 1 1.5 14.625v-9.75ZM8.25 9.75a3.75 3.75 0 1 1 7.5 0 3.75 3.75 0 0 1-7.5 0ZM18.75 9a.75.75 0 0 0-.75.75v.008c0 .414.336.75.75.75h.008a.75.75 0 0 0 .75-.75V9.75a.75.75 0 0 0-.75-.75h-.008ZM4.5 9.75A.75.75 0 0 1 5.25 9h.008a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75.75H5.25a.75.75 0 0 1-.75-.75V9.75Z" clipRule="evenodd" />
-              <path d="M2.25 18a.75.75 0 0 0 0 1.5c5.4 0 10.63.722 15.6 2.075 1.19.324 2.4-.558 2.4-1.82V18.75a.75.75 0 0 0-.75-.75H2.25Z" />
+              <path fillRule="evenodd" d="M2.25 13.5a8.25 8.25 0 0 1 8.25-8.25.75.75 0 0 1 .75.75v6.75H18a.75.75 0 0 1 .75.75 8.25 8.25 0 0 1-16.5 0Z" clipRule="evenodd" />
+              <path fillRule="evenodd" d="M12.75 3a.75.75 0 0 1 .75-.75 8.25 8.25 0 0 1 8.25 8.25.75.75 0 0 1-.75.75h-7.5a.75.75 0 0 1-.75-.75V3Z" clipRule="evenodd" />
             </svg>
           </div>
           <p className="text-3xl font-bold text-white drop-shadow-sm">
-            {loading ? "—" : `৳ ${totalRevenue.toLocaleString()}`}
+            {loading ? "—" : `Product Sells`}
+            {/* {loading ? "—" : ` ${profit.toLocaleString()}`} */}
           </p>
-          <p className="mt-1 text-sm font-medium text-white/80">Revenue</p>
+          <p className="mt-1 text-sm font-medium text-white/80">Product Flow</p>
           <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-white/70 transition-all duration-300 group-hover:gap-2 group-hover:text-white">
             View details <ArrowIcon />
           </span>
@@ -193,12 +202,12 @@ export default function AdminDashboardPage() {
         </a>
       </div>
 
-      {/* ─── Existing detail stat cards ─── */}
+      {/* ─── Token throughput (token-only system) ─── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total Revenue" value={`৳ ${totalRevenue.toLocaleString()}`} hint="All time" />
-        <StatCard label="Daily Revenue" value={`৳ ${daily.toLocaleString()}`} hint="Today" />
-        <StatCard label="Weekly Revenue" value={`৳ ${weekly.toLocaleString()}`} hint="Last 7 days" />
-        <StatCard label="Monthly Revenue" value={`৳ ${monthly.toLocaleString()}`} hint="This month" />
+        <StatCard label="Total Tokens" value={totalTokens.toLocaleString()} hint="All time" />
+        <StatCard label="Daily Tokens" value={dailyTokens.toLocaleString()} hint="Today" />
+        <StatCard label="Weekly Tokens" value={weeklyTokens.toLocaleString()} hint="Last 7 days" />
+        <StatCard label="Monthly Tokens" value={monthlyTokens.toLocaleString()} hint="This month" />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -209,18 +218,19 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Profit (est.)" value={`৳ ${profit.toLocaleString()}`} hint="Revenue − cost basis" />
+        <StatCard label="Product Margin (est.)" value={`৳ ${profit.toLocaleString()}`} hint="Selling − cost basis" />
         <StatCard label="Referrals" value={referralCount} hint="Clients invited by others" />
       </div>
 
       <section className="mt-8">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">All system users</h2>
+          <DateRangeFilter value={range} onChange={setRange} />
         </div>
         <DataTable<User>
           columns={userColumns}
-          rows={users}
-          emptyMessage={loading ? "Loading users…" : "No users found."}
+          rows={filteredUsers}
+          emptyMessage={loading ? "Loading users…" : "No users in this range."}
         />
       </section>
     </DashboardShell>

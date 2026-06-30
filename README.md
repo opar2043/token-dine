@@ -126,11 +126,13 @@ npm run lint         # next lint
 
 These are seeded by `POST https://tokendinerestaurent.vercel.app/seed` (destructive — wipes & reseeds users/clients/products):
 
+
 | Role    | Identifier             | Password |
 | ------- | ---------------------- | -------- |
 | Admin   | `admin@restaurant.com` | `12345`  |
 | Manager | `01710000001` (mobile) | `12345`  |
 | Manager | `01710000002`          | `12345`  |
+
 | Worker  | `01810000001`          | `12345`  |
 | Worker  | `01810000002`          | `12345`  |
 | Worker  | `01810000003`          | `12345`  *(blocked — login denied)* |

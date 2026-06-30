@@ -28,6 +28,8 @@ export interface Client {
   address?: string;
   gender?: "male" | "female" | "other";
   referral?: string;
+  /** Mobiles of the people this client has referred. */
+  referrals?: string[];
   rating: number;
   tokensBought: number;
   tokensSpent: number;
@@ -52,6 +54,8 @@ export type ProductStatus = "in-stock" | "low-stock" | "out-of-stock";
 
 export interface Product {
   id: string;
+  /** Optional admin-supplied custom product code shown as the SKU. */
+  productId?: string;
   name: string;
   image?: string;
   category: string;
@@ -61,6 +65,24 @@ export interface Product {
   status: ProductStatus;
   addedOn: string;
   updatedOn: string;
+}
+
+export interface ProductFlowRow {
+  /** Optional row key (not sent by the API; present to satisfy table typing). */
+  id?: string;
+  productId: string | null;
+  /** Custom product code, if the admin set one. */
+  code?: string;
+  productName?: string;
+  qtySold: number;
+  tokensUsed: number;
+  amount: number;
+  orders: number;
+  costPrice?: number;
+  sellingPrice?: number;
+  category?: string;
+  image?: string;
+  margin: number;
 }
 
 export interface TokenSale {
@@ -140,7 +162,9 @@ export interface ClientPurchase {
 
 export interface AnalyticsOverview {
   revenue: { total: number; day: number; week: number; month: number };
+  tokens: { total: number; day: number; week: number; month: number };
   tokensSold: number;
+  totalProducts: number;
   activeClients: number;
   stockAlerts: number;
   referralCount: number;

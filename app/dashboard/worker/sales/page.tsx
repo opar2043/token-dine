@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, type Column } from "@/components/DataTable";
+import { DateRangeFilter } from "@/components/DateRangeFilter";
 import { useAuth } from "@/context/AuthContext";
 import { clientsService, salesService } from "@/lib/services";
 import { buildLookup, formatDate, formatId } from "@/lib/format";
+import { ALL_RANGE, inRange, type DateRange } from "@/lib/dateRange";
 import type { Client, TokenSale } from "@/lib/types";
 
 export default function WorkerSalesPage() {
@@ -14,6 +16,7 @@ export default function WorkerSalesPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [range, setRange] = useState<DateRange>(ALL_RANGE);
 
   useEffect(() => {
     if (!user) return;
@@ -40,6 +43,11 @@ export default function WorkerSalesPage() {
 
   const clientMap = useMemo(() => buildLookup(clients), [clients]);
 
+  const filteredSales = useMemo(
+    () => sales.filter((s) => inRange(s.date, range)),
+    [sales, range],
+  );
+
   const columns: Column<TokenSale>[] = [
     { key: "id", header: "Txn ID", render: (s) => formatId(s.id) },
     { key: "date", header: "Date", render: (s) => formatDate(s.date) },
@@ -49,21 +57,18 @@ export default function WorkerSalesPage() {
       render: (s) => clientMap.get(s.clientId)?.name ?? s.client ?? formatId(s.clientId),
     },
     { key: "tokens", header: "Tokens", align: "right" },
-    {
-      key: "amount",
-      header: "Amount (BDT)",
-      align: "right",
-      render: (s) => s.amount.toLocaleString(),
-    },
   ];
 
   return (
     <DashboardShell role="worker">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">My sales</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Token sales you have processed.
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">My sales</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Token sales you have processed.
+          </p>
+        </div>
+        <DateRangeFilter value={range} onChange={setRange} />
       </div>
 
       {error ? (
@@ -74,8 +79,8 @@ export default function WorkerSalesPage() {
 
       <DataTable<TokenSale>
         columns={columns}
-        rows={sales}
-        emptyMessage={loading ? "Loading sales…" : "No sales yet."}
+        rows={filteredSales}
+        emptyMessage={loading ? "Loading sales…" : "No sales in this range."}
       />
     </DashboardShell>
   );

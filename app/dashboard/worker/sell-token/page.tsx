@@ -13,13 +13,12 @@ interface CartItem {
   tokensUsed: number;
 }
 
-const TOKEN_VALUE = 100;
-
 export default function WorkerSellTokenPage() {
   const { user } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [clientId, setClientId] = useState("");
+  const [clientSearch, setClientSearch] = useState("");
   const [tokens, setTokens] = useState(0);
   const [items, setItems] = useState<CartItem[]>([]);
   const [done, setDone] = useState<string | null>(null);
@@ -38,7 +37,6 @@ export default function WorkerSellTokenPage() {
         if (cancelled) return;
         setClients(c.items);
         setProducts(p);
-        if (c.items[0]) setClientId(c.items[0].id);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load data.");
       } finally {
@@ -55,17 +53,22 @@ export default function WorkerSellTokenPage() {
     [clients, clientId],
   );
 
-  const totalSpend = useMemo(
-    () =>
-      items.reduce((sum, item) => {
-        const p = products.find((x) => x.id === item.productId);
-        return sum + (p ? p.sellingPrice * item.qty : 0);
-      }, 0),
-    [items, products],
+  // Filter clients by mobile number (digits only) as the worker types.
+  const matchedClients = useMemo(() => {
+    const query = clientSearch.replace(/\D/g, "");
+    if (!query) return [];
+    return clients
+      .filter((c) => c.mobile.replace(/\D/g, "").includes(query))
+      .slice(0, 8);
+  }, [clients, clientSearch]);
+
+  // Token-only accounting: how many tokens the cart consumes.
+  const tokensUsed = useMemo(
+    () => items.reduce((sum, item) => sum + (item.tokensUsed || 0), 0),
+    [items],
   );
 
-  const tokenAmount = tokens * TOKEN_VALUE;
-  const remaining = (client?.balance ?? 0) * TOKEN_VALUE + tokenAmount - totalSpend;
+  const remaining = (client?.balance ?? 0) + tokens - tokensUsed;
 
   const addItem = () =>
     setItems((prev) => [
@@ -84,12 +87,13 @@ export default function WorkerSellTokenPage() {
     setError(null);
     setSubmitting(true);
     try {
-      if (tokens > 0) {
+      if (tokens !== 0) {
         await salesService.createSales({
           clientId: client.id,
           workerId: user.id,
           tokens,
-          amount: tokenAmount,
+          // Amount tracked in tokens (the system's primary unit).
+          amount: tokens,
         });
       }
       for (const item of items) {
@@ -139,35 +143,98 @@ export default function WorkerSellTokenPage() {
             <label className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Client
             </label>
-            <select
+            <input
+              type="search"
+              inputMode="tel"
               className="input mt-1"
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-            >
-              {clients.length === 0 ? (
-                <option value="">{loading ? "Loading…" : "No clients"}</option>
-              ) : null}
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} • {c.mobile}
-                </option>
-              ))}
-            </select>
+              placeholder={loading ? "Loading…" : "Search by mobile number…"}
+              value={clientSearch}
+              onChange={(e) => {
+                setClientSearch(e.target.value);
+                if (clientId) setClientId("");
+              }}
+            />
+
+            {client ? (
+              <div className="mt-2 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
+                <div>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">{client.name}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{client.mobile}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClientId("");
+                    setClientSearch("");
+                  }}
+                  className="text-xs font-medium text-slate-500 hover:text-rose-500 dark:text-slate-400"
+                >
+                  Change
+                </button>
+              </div>
+            ) : clientSearch.replace(/\D/g, "") ? (
+              <div className="mt-2 space-y-1">
+                {matchedClients.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-slate-200 p-3 text-center text-sm text-slate-500 dark:border-slate-800">
+                    No client matches that mobile number.
+                  </p>
+                ) : (
+                  matchedClients.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setClientId(c.id);
+                        setClientSearch("");
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-left transition hover:bg-slate-100 dark:border-slate-800 dark:hover:bg-slate-900"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-slate-900 dark:text-white">{c.name}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{c.mobile}</p>
+                      </div>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        {c.balance.toLocaleString()} tkn
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : null}
           </div>
 
           <div>
             <label className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Tokens to sell
             </label>
-            <input
-              type="number"
-              min={0}
-              className="input mt-1"
-              value={tokens}
-              onChange={(e) => setTokens(Number(e.target.value) || 0)}
-            />
+            <div className="mt-1 flex items-stretch gap-2">
+              <button
+                type="button"
+                onClick={() => setTokens((t) => t - 1)}
+                className="btn-ghost w-11 shrink-0 text-lg font-semibold"
+                aria-label="Decrease tokens"
+              >
+                −
+              </button>
+              <input
+                type="number"
+                className="input text-center"
+                value={tokens}
+                onChange={(e) => setTokens(Number(e.target.value) || 0)}
+              />
+              <button
+                type="button"
+                onClick={() => setTokens((t) => t + 1)}
+                className="btn-ghost w-11 shrink-0 text-lg font-semibold"
+                aria-label="Increase tokens"
+              >
+                +
+              </button>
+            </div>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              1 token = ৳ {TOKEN_VALUE}. Sale value: ৳ {tokenAmount.toLocaleString()}
+              {tokens < 0
+                ? `This client returns ${Math.abs(tokens).toLocaleString()} token(s).`
+                : `Issuing ${tokens.toLocaleString()} token(s) to this client.`}
             </p>
           </div>
 
@@ -220,11 +287,7 @@ export default function WorkerSellTokenPage() {
                       onChange={(e) => updateItem(idx, { tokensUsed: Number(e.target.value) || 1 })}
                     />
                     <div className="text-right text-sm font-medium text-slate-700 dark:text-slate-200">
-                      ৳{" "}
-                      {(
-                        (products.find((p) => p.id === item.productId)?.sellingPrice ?? 0) *
-                        item.qty
-                      ).toLocaleString()}
+                      {item.tokensUsed.toLocaleString()} tkn
                     </div>
                     <button
                       type="button"
@@ -246,16 +309,23 @@ export default function WorkerSellTokenPage() {
 
           <Row label="Client" value={client?.name ?? "—"} />
           <Row label="Client ID" value={client ? formatId(client.id) : "—"} />
-          <Row label="Existing balance" value={`৳ ${((client?.balance ?? 0) * TOKEN_VALUE).toLocaleString()}`} />
-          <Row label="New tokens" value={`+ ৳ ${tokenAmount.toLocaleString()}`} />
-          <Row label="Spending" value={`− ৳ ${totalSpend.toLocaleString()}`} />
+          <Row label="Existing balance" value={`${(client?.balance ?? 0).toLocaleString()} tkn`} />
+          <Row
+            label={tokens < 0 ? "Tokens returned" : "New tokens"}
+            value={
+              tokens < 0
+                ? `− ${Math.abs(tokens).toLocaleString()} tkn`
+                : `+ ${tokens.toLocaleString()} tkn`
+            }
+          />
+          <Row label="Tokens spent" value={`− ${tokensUsed.toLocaleString()} tkn`} />
 
           <div className="border-t border-slate-200 pt-3 dark:border-slate-800">
             <Row
               label="Remaining balance"
               value={
                 <span className={remaining < 0 ? "text-rose-600 dark:text-rose-400" : ""}>
-                  ৳ {remaining.toLocaleString()}
+                  {remaining.toLocaleString()} tkn
                 </span>
               }
               bold

@@ -50,7 +50,7 @@ export default function WorkerAttendancePage() {
   const columns: Column<AttendanceEntry>[] = [
     { key: "id", header: "Entry", render: (a) => formatId(a.id) },
     { key: "date", header: "Date", render: (a) => formatDate(a.date) },
-    { key: "status", header: "Status", render: (a) => a.status === "present" ? <StatusBadge status={a.status} /> : null },
+    { key: "status", header: "Status", render: (a) => <StatusBadge status={a.status} /> },
   ];
 
   return (

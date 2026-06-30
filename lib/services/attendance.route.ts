@@ -19,6 +19,16 @@ export const attendanceService = {
     return data;
   },
 
+  // Manager/admin records (or overrides) attendance for a worker.
+  markAttendance: async (payload: {
+    workerId: string;
+    status: AttendanceStatus;
+    date?: string;
+  }): Promise<AttendanceEntry> => {
+    const { data } = await api.post<AttendanceEntry>("/attendance", payload);
+    return data;
+  },
+
   updateAttendanceStatus: async (
     id: string,
     status: AttendanceStatus

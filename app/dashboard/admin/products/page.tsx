@@ -49,7 +49,7 @@ export default function AdminProductsPage() {
         </div>
       ),
     },
-    { key: "id", header: "SKU", render: (p) => formatId(p.id) },
+    { key: "id", header: "SKU", render: (p) => p.productId ?? formatId(p.id) },
     { key: "name", header: "Product" },
     { key: "category", header: "Category" },
     { key: "costPrice", header: "Cost", align: "right", render: (p) => `৳ ${p.costPrice}` },
@@ -174,6 +174,7 @@ function ProductForm({
   onUpdate: (p: Product) => void;
 }) {
   const [name, setName] = useState(initialData?.name ?? "");
+  const [productId, setProductId] = useState(initialData?.productId ?? "");
   const [image, setImage] = useState(initialData?.image ?? emojiChoices[0]);
   const [category, setCategory] = useState(initialData?.category ?? categories[0]);
   const [costPrice, setCostPrice] = useState(initialData?.costPrice ?? 0);
@@ -223,6 +224,7 @@ function ProductForm({
           costPrice,
           sellingPrice,
           stock,
+          productId: productId.trim() || undefined,
         });
         onCreate(created);
       }
@@ -241,6 +243,16 @@ function ProductForm({
         <Field label="Product name" required>
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} required />
         </Field>
+        {initialData ? null : (
+          <Field label="Custom product ID (optional)">
+            <input
+              className="input"
+              placeholder="e.g. BIR-001"
+              value={productId}
+              onChange={(e) => setProductId(e.target.value)}
+            />
+          </Field>
+        )}
         <Field label="Category">
           <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
             {categories.map((c) => (

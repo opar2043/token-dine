@@ -13,6 +13,8 @@ export interface CreateProductPayload {
   costPrice: number;
   sellingPrice: number;
   stock?: number;
+  /** Optional admin-supplied custom product code. */
+  productId?: string;
 }
 
 export type UpdateProductPayload = Partial<CreateProductPayload> & {

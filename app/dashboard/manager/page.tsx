@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, StatusBadge, type Column } from "@/components/DataTable";
 import { StatCard } from "@/components/StatCard";
+import { DateRangeFilter } from "@/components/DateRangeFilter";
 import {
   attendanceService,
   salesService,
@@ -11,6 +12,7 @@ import {
   usersService,
 } from "@/lib/services";
 import { formatId } from "@/lib/format";
+import { ALL_RANGE, inRange, type DateRange } from "@/lib/dateRange";
 import type { AttendanceEntry, TableAssignment, TokenSale, User } from "@/lib/types";
 
 export default function ManagerDashboardPage() {
@@ -20,6 +22,7 @@ export default function ManagerDashboardPage() {
   const [tables, setTables] = useState<TableAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [range, setRange] = useState<DateRange>(ALL_RANGE);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,13 +51,17 @@ export default function ManagerDashboardPage() {
   }, []);
 
   const activeWorkers = workers.filter((w) => w.status === "active").length;
+  const filteredSales = useMemo(
+    () => sales.filter((s) => inRange(s.date, range)),
+    [sales, range],
+  );
   const tokensSoldByWorker = useMemo(() => {
     const map = new Map<string, number>();
-    for (const s of sales) {
+    for (const s of filteredSales) {
       map.set(s.workerId, (map.get(s.workerId) ?? 0) + s.tokens);
     }
     return map;
-  }, [sales]);
+  }, [filteredSales]);
 
   const attendanceByWorker = useMemo(() => {
     const counts = new Map<string, { total: number; present: number }>();
@@ -73,8 +80,8 @@ export default function ManagerDashboardPage() {
     return map;
   }, [tables]);
 
-  const totalSales = sales.reduce((sum, s) => sum + s.amount, 0);
-  const totalTokensSold = sales.reduce((sum, s) => sum + s.tokens, 0);
+  const totalTransactions = filteredSales.length;
+  const totalTokensSold = filteredSales.reduce((sum, s) => sum + s.tokens, 0);
 
   const avgAttendance =
     workers.length === 0
@@ -131,11 +138,14 @@ export default function ManagerDashboardPage() {
 
   return (
     <DashboardShell role="manager">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Manager overview</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Monitor your team and daily operations.
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Manager overview</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Monitor your team and daily operations.
+          </p>
+        </div>
+        <DateRangeFilter value={range} onChange={setRange} />
       </div>
 
       {error ? (
@@ -203,9 +213,9 @@ export default function ManagerDashboardPage() {
             </svg>
           </div>
           <p className="text-3xl font-bold text-white drop-shadow-sm">
-            {loading ? "—" : `৳ ${totalSales.toLocaleString()}`}
+            {loading ? "—" : totalTransactions.toLocaleString()}
           </p>
-          <p className="mt-1 text-sm font-medium text-white/80">Revenue</p>
+          <p className="mt-1 text-sm font-medium text-white/80">Transactions</p>
           <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-white/70 transition-all duration-300 group-hover:gap-2 group-hover:text-white">
             View details <ArrowIcon />
           </span>
@@ -238,7 +248,7 @@ export default function ManagerDashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Active Workers" value={activeWorkers} hint={`of ${workers.length} total`} />
         <StatCard label="Avg Attendance" value={`${avgAttendance}%`} />
-        <StatCard label="Total Sales" value={`৳ ${totalSales.toLocaleString()}`} />
+        <StatCard label="Total Tokens" value={totalTokensSold.toLocaleString()} hint="In range" />
         <StatCard label="Tables Assigned" value={tablesByWorker.size} />
       </div>
 
