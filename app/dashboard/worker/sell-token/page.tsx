@@ -19,7 +19,7 @@ export default function WorkerSellTokenPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [clientId, setClientId] = useState("");
   const [clientSearch, setClientSearch] = useState("");
-  const [tokens, setTokens] = useState(0);
+  const [tokens, setTokens] = useState("");
   const [items, setItems] = useState<CartItem[]>([]);
   const [done, setDone] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,14 +53,15 @@ export default function WorkerSellTokenPage() {
     [clients, clientId],
   );
 
-  // Filter clients by mobile number (digits only) as the worker types.
+  // Show a client only once the typed mobile number matches one exactly.
   const matchedClients = useMemo(() => {
     const query = clientSearch.replace(/\D/g, "");
     if (!query) return [];
-    return clients
-      .filter((c) => c.mobile.replace(/\D/g, "").includes(query))
-      .slice(0, 8);
+    return clients.filter((c) => c.mobile.replace(/\D/g, "") === query);
   }, [clients, clientSearch]);
+
+  // Numeric value of the tokens field (empty string counts as 0).
+  const tokenCount = Number(tokens) || 0;
 
   // Token-only accounting: how many tokens the cart consumes.
   const tokensUsed = useMemo(
@@ -68,7 +69,8 @@ export default function WorkerSellTokenPage() {
     [items],
   );
 
-  const remaining = (client?.balance ?? 0) + tokens - tokensUsed;
+  // Net for this transaction only — the client's prior balance is never shown.
+  const remaining = tokenCount - tokensUsed;
 
   const addItem = () =>
     setItems((prev) => [
@@ -87,13 +89,13 @@ export default function WorkerSellTokenPage() {
     setError(null);
     setSubmitting(true);
     try {
-      if (tokens !== 0) {
+      if (tokenCount !== 0) {
         await salesService.createSales({
           clientId: client.id,
           workerId: user.id,
-          tokens,
+          tokens: tokenCount,
           // Amount tracked in tokens (the system's primary unit).
-          amount: tokens,
+          amount: tokenCount,
         });
       }
       for (const item of items) {
@@ -107,7 +109,7 @@ export default function WorkerSellTokenPage() {
       const updatedClient = await clientsService.getClient(client.id);
       setClients((prev) => prev.map((c) => (c.id === updatedClient.id ? updatedClient : c)));
       setDone(`Transaction for ${client.name} saved.`);
-      setTokens(0);
+      setTokens("");
       setItems([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to finalize transaction.");
@@ -210,7 +212,7 @@ export default function WorkerSellTokenPage() {
             <div className="mt-1 flex items-stretch gap-2">
               <button
                 type="button"
-                onClick={() => setTokens((t) => t - 1)}
+                onClick={() => setTokens(String(tokenCount - 1))}
                 className="btn-ghost w-11 shrink-0 text-lg font-semibold"
                 aria-label="Decrease tokens"
               >
@@ -219,12 +221,13 @@ export default function WorkerSellTokenPage() {
               <input
                 type="number"
                 className="input text-center"
+                placeholder="0"
                 value={tokens}
-                onChange={(e) => setTokens(Number(e.target.value) || 0)}
+                onChange={(e) => setTokens(e.target.value)}
               />
               <button
                 type="button"
-                onClick={() => setTokens((t) => t + 1)}
+                onClick={() => setTokens(String(tokenCount + 1))}
                 className="btn-ghost w-11 shrink-0 text-lg font-semibold"
                 aria-label="Increase tokens"
               >
@@ -232,9 +235,9 @@ export default function WorkerSellTokenPage() {
               </button>
             </div>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {tokens < 0
-                ? `This client returns ${Math.abs(tokens).toLocaleString()} token(s).`
-                : `Issuing ${tokens.toLocaleString()} token(s) to this client.`}
+              {tokenCount < 0
+                ? `This client returns ${Math.abs(tokenCount).toLocaleString()} token(s).`
+                : `Issuing ${tokenCount.toLocaleString()} token(s) to this client.`}
             </p>
           </div>
 
@@ -309,20 +312,19 @@ export default function WorkerSellTokenPage() {
 
           <Row label="Client" value={client?.name ?? "—"} />
           <Row label="Client ID" value={client ? formatId(client.id) : "—"} />
-          <Row label="Existing balance" value={`${(client?.balance ?? 0).toLocaleString()} tkn`} />
           <Row
-            label={tokens < 0 ? "Tokens returned" : "New tokens"}
+            label={tokenCount < 0 ? "Tokens returned" : "New tokens"}
             value={
-              tokens < 0
-                ? `− ${Math.abs(tokens).toLocaleString()} tkn`
-                : `+ ${tokens.toLocaleString()} tkn`
+              tokenCount < 0
+                ? `− ${Math.abs(tokenCount).toLocaleString()} tkn`
+                : `+ ${tokenCount.toLocaleString()} tkn`
             }
           />
           <Row label="Tokens spent" value={`− ${tokensUsed.toLocaleString()} tkn`} />
 
           <div className="border-t border-slate-200 pt-3 dark:border-slate-800">
             <Row
-              label="Remaining balance"
+              label="Net this transaction"
               value={
                 <span className={remaining < 0 ? "text-rose-600 dark:text-rose-400" : ""}>
                   {remaining.toLocaleString()} tkn
