@@ -30,7 +30,7 @@ const navByRole: Record<Role, NavItem[]> = {
     // { label: "Attendance", href: "/dashboard/manager/attendance" },
     // { label: "Inventory", href: "/dashboard/manager/inventory" },
     // { label: "Sales", href: "/dashboard/manager/sales" },
-    { label: "Bonuses", href: "/dashboard/manager/bonuses" },
+    // { label: "Bonusess", href: "/dashboard/manager/bonuses" },
     { label: "Clients Bonus", href: "/dashboard/manager/clients-bonus" },
   ],
   
