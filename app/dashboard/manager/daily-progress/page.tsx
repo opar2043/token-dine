@@ -51,6 +51,26 @@ export default function ManagerDailyProgressPage() {
   const balance = useMemo(() => given - sold, [given, sold]);
   const negative = balance < 0;
 
+  const groupedRows = useMemo(() => {
+    const map = new Map<string, DailyProgress>();
+    for (const r of rows) {
+      const key = r.workerId;
+      const existing = map.get(key);
+      if (existing) {
+        existing.tokenGiven += r.tokenGiven;
+        existing.tokenSold += r.tokenSold;
+        existing.balance = existing.tokenGiven - existing.tokenSold;
+        existing.id = `${existing.id},${r.id}`; // store all ids for deletion
+        if (r.notes) {
+          existing.notes = existing.notes ? `${existing.notes}, ${r.notes}` : r.notes;
+        }
+      } else {
+        map.set(key, { ...r });
+      }
+    }
+    return Array.from(map.values());
+  }, [rows]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -76,11 +96,12 @@ export default function ManagerDailyProgressPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (idOrIds: string) => {
     if (!confirm("Are you sure you want to delete this progress entry?")) return;
     try {
-      await progressService.deleteProgress(id);
-      setRows((prev) => prev.filter((p) => p.id !== id));
+      const ids = idOrIds.split(",");
+      await Promise.all(ids.map((id) => progressService.deleteProgress(id)));
+      setRows((prev) => prev.filter((p) => !ids.includes(p.id)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete progress.");
     }
@@ -234,7 +255,7 @@ export default function ManagerDailyProgressPage() {
 
       <DataTable<DailyProgress>
         columns={columns}
-        rows={rows}
+        rows={groupedRows}
         emptyMessage={loading ? "Loading progress…" : "No entries yet."}
       />
     </DashboardShell>

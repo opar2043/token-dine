@@ -9,3 +9,4 @@ export { bonusesService } from "./bonuses.route";
 export { tablesService } from "./tables.route";
 export { progressService } from "./progress.route";
 export { analyticsService } from "./analytics.route";
+export { clientBonusesService } from "./client-bonuses.route";

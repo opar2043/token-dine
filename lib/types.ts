@@ -126,6 +126,17 @@ export interface Bonus {
   date: string;
 }
 
+export interface ClientBonus {
+  id: string;
+  clientId: string;
+  client?: string;
+  workerId: string;
+  worker?: string;
+  amount: number;
+  reason: string;
+  date: string;
+}
+
 export type TableStatus = "active" | "free";
 
 export interface TableAssignment {

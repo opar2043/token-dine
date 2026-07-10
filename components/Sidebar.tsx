@@ -24,14 +24,16 @@ const navByRole: Record<Role, NavItem[]> = {
   ],
   manager: [
     // { label: "Overview", href: "/dashboard/manager" },
-    { label: "Workers", href: "/dashboard/manager/workers" },
+    // { label: "Workers", href: "/dashboard/manager/workers" },
     { label: "Daily Progress", href: "/dashboard/manager/daily-progress" },
-    { label: "Tables", href: "/dashboard/manager/tables" },
-    { label: "Attendance", href: "/dashboard/manager/attendance" },
-    { label: "Inventory", href: "/dashboard/manager/inventory" },
-    { label: "Sales", href: "/dashboard/manager/sales" },
+    // { label: "Tables", href: "/dashboard/manager/tables" },
+    // { label: "Attendance", href: "/dashboard/manager/attendance" },
+    // { label: "Inventory", href: "/dashboard/manager/inventory" },
+    // { label: "Sales", href: "/dashboard/manager/sales" },
     { label: "Bonuses", href: "/dashboard/manager/bonuses" },
+    { label: "Clients Bonus", href: "/dashboard/manager/clients-bonus" },
   ],
+  
   worker: [
     // { label: "Clients", href: "/dashboard/worker/clients" },
     { label: "New Client", href: "/dashboard/worker/new-client" },
