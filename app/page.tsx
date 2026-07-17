@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { roleLanding } from "@/lib/roles";
 
 export default function HomePage() {
   const router = useRouter();
@@ -11,7 +12,7 @@ export default function HomePage() {
   useEffect(() => {
     if (loading) return;
     if (user) {
-      router.replace(`/dashboard/${user.role}`);
+      router.replace(roleLanding(user.role));
     } else {
       router.replace("/login");
     }

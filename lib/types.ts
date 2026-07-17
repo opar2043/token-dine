@@ -113,6 +113,8 @@ export interface Complaint {
   byId: string;
   by?: string;
   subject: string;
+  /** Mobile number of the client the complaint is about. */
+  clientMobile?: string | null;
   date: string;
   status: ComplaintStatus;
 }

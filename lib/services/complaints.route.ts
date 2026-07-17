@@ -8,6 +8,7 @@ export interface ListComplaintsParams {
 export interface CreateComplaintPayload {
   byId: string;
   subject: string;
+  clientMobile?: string;
 }
 
 export const complaintsService = {

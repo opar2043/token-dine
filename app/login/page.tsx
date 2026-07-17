@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { roleLanding } from "@/lib/roles";
 
 type Mode = "admin" | "staff";
 
@@ -18,7 +19,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace(`/dashboard/${user.role.toLowerCase()}`);
+      router.replace(roleLanding(user.role));
     }
   }, [user, loading, router]);
 
@@ -34,7 +35,7 @@ export default function LoginPage() {
         mode === "admin"
           ? await loginAdmin(identifier.trim(), password)
           : await loginStaff(identifier.trim(), password);
-      router.replace(`/dashboard/${result.role.toLowerCase()}`);
+      router.replace(roleLanding(result.role));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed.");
     } finally {

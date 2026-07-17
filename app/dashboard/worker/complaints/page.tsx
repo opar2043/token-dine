@@ -54,6 +54,11 @@ export default function WorkerComplaintsPage() {
       render: (c) => userMap.get(c.byId)?.name ?? c.by ?? formatId(c.byId),
     },
     { key: "subject", header: "Subject" },
+    {
+      key: "clientMobile",
+      header: "Client mobile",
+      render: (c) => c.clientMobile || "—",
+    },
     { key: "date", header: "Date", render: (c) => formatDate(c.date) },
     { key: "status", header: "Status", render: (c) => <StatusBadge status={c.status} /> },
   ];
@@ -109,6 +114,7 @@ function ComplaintForm({
   onCreate: (c: Complaint) => void;
 }) {
   const [subject, setSubject] = useState("");
+  const [clientMobile, setClientMobile] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -118,7 +124,11 @@ function ComplaintForm({
     if (!subject.trim()) return setError("Please describe the issue.");
     setSubmitting(true);
     try {
-      const created = await complaintsService.createComplaints({ byId, subject: subject.trim() });
+      const created = await complaintsService.createComplaints({
+        byId,
+        subject: subject.trim(),
+        clientMobile: clientMobile.trim() || undefined,
+      });
       onCreate(created);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to file complaint.");
@@ -129,6 +139,20 @@ function ComplaintForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <label className="block">
+        <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          Client mobile number
+        </span>
+        <input
+          type="tel"
+          inputMode="tel"
+          className="input mt-1"
+          placeholder="01XXXXXXXXX"
+          value={clientMobile}
+          onChange={(e) => setClientMobile(e.target.value)}
+        />
+      </label>
+
       <label className="block">
         <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
           Subject

@@ -5,12 +5,17 @@ import { DashboardShell } from "@/components/DashboardShell";
 import { DataTable, StatusBadge, type Column } from "@/components/DataTable";
 import { StatCard } from "@/components/StatCard";
 import { Modal } from "@/components/Modal";
+import { DateRangeFilter } from "@/components/DateRangeFilter";
 import { EditIcon, PlusIcon } from "@/components/icons";
 import { tablesService, usersService } from "@/lib/services";
 import { buildLookup, formatDate, formatId } from "@/lib/format";
+import { inRange, type DateRange } from "@/lib/dateRange";
 import type { TableAssignment, User } from "@/lib/types";
 
 type Mode = "assign" | "edit" | null;
+
+// Default to tables assigned today.
+const TODAY_RANGE: DateRange = { preset: "day" };
 
 export default function AdminTablesPage() {
   const [tables, setTables] = useState<TableAssignment[]>([]);
@@ -19,6 +24,7 @@ export default function AdminTablesPage() {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>(null);
   const [selected, setSelected] = useState<TableAssignment | null>(null);
+  const [range, setRange] = useState<DateRange>(TODAY_RANGE);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,8 +68,13 @@ export default function AdminTablesPage() {
     }
   };
 
-  const active = tables.filter((t) => t.status === "active").length;
-  const free = tables.length - active;
+  const filtered = useMemo(
+    () => tables.filter((t) => inRange(t.assignedOn, range)),
+    [tables, range],
+  );
+
+  const active = filtered.filter((t) => t.status === "active").length;
+  const free = filtered.length - active;
 
   const columns: Column<TableAssignment>[] = [
     { key: "id", header: "Assignment", render: (t) => formatId(t.id) },
@@ -114,16 +125,19 @@ export default function AdminTablesPage() {
             Add tables and assign staff, or reassign existing ones.
           </p>
         </div>
-        <button
-          type="button"
-          className="btn-primary gap-1.5"
-          onClick={() => {
-            setSelected(null);
-            setMode("assign");
-          }}
-        >
-          <PlusIcon /> Add table
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangeFilter value={range} onChange={setRange} />
+          <button
+            type="button"
+            className="btn-primary gap-1.5"
+            onClick={() => {
+              setSelected(null);
+              setMode("assign");
+            }}
+          >
+            <PlusIcon /> Add table
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -140,8 +154,8 @@ export default function AdminTablesPage() {
 
       <DataTable<TableAssignment>
         columns={columns}
-        rows={tables}
-        emptyMessage={loading ? "Loading tables…" : "No tables yet."}
+        rows={filtered}
+        emptyMessage={loading ? "Loading tables…" : "No tables assigned in this range."}
       />
 
       <Modal
